@@ -16,6 +16,8 @@
  *     'codex-toml'           → early-return after writing codex.toml.
  *     'copilot-instructions' → early-return after writing .github/copilot-instructions.md.
  *     'cline-rules'          → early-return after writing .clinerules.
+ *     'zoo-modes'            → dedicated custom-modes surface writer (.roomodes /
+ *                              global custom_modes.yaml); no shared settings file (#4746).
  *     'cursor-hooks-json'    → early-return after writing .cursor/hooks.json (issue #777).
  *     'profile-marker-only'  → early-return after writing only the profile marker.
  * - `writesSharedSettings` is the finishInstall writeSettings gate:
@@ -45,6 +47,10 @@ type ConfigInstallSurface =
   | 'codex-toml'
   | 'copilot-instructions'
   | 'cline-rules'
+  // #4746 — Zoo Code's dedicated custom-modes surface writer; zoo writes no
+  // shared settings/config file (modes via the zoo-modes writer, commands as
+  // files), so it pairs to configFormat 'none' in the parity gate.
+  | 'zoo-modes'
   | 'cursor-hooks-json'
   | 'profile-marker-only'
   // #2103 — Marketplace/VSIX-distributed hosts (e.g. VS Code) with no CLI
@@ -94,7 +100,8 @@ interface InstallPlan extends RuntimeConfigIntent {
 type RuntimeDescriptorMap = Record<string, { runtime: Record<string, unknown> | undefined }>;
 
 /**
- * The complete set of 16 supported runtimes for config-adapter dispatch.
+ * The complete set of 19 supported runtimes for config-adapter dispatch
+ * (18 prior + 'zoo', #4746).
  *
  * Excludes runtimes whose installSurface is 'none' (#2103 — e.g. VS Code): a
  * 'none' installSurface means the runtime has NO CLI install surface at all
@@ -117,6 +124,8 @@ const INSTALL_SURFACES: ReadonlyArray<ConfigInstallSurface> = Object.freeze([
   'codex-toml',
   'copilot-instructions',
   'cline-rules',
+  // #4746 — Zoo Code dedicated custom-modes surface writer.
+  'zoo-modes',
   'cursor-hooks-json',
   'profile-marker-only',
   'none',

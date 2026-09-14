@@ -4188,6 +4188,89 @@ const capabilities = {
         "skipSharedHooksInstall": true
       }
     }
+  },
+  "zoo": {
+    "id": "zoo",
+    "role": "runtime",
+    "version": "1.14.0",
+    "title": "Zoo Code",
+    "description": "Zoo Code (VS Code extension, successor of the archived Roo Code) — custom modes (.roomodes / global custom_modes.yaml) + flat gsd-* slash commands under .roo/ paths; no hooks surface; tier-2 support.",
+    "tier": "core",
+    "requires": [],
+    "engines": {
+      "gsd": ">=1.14.0"
+    },
+    "runtime": {
+      "configHome": {
+        "kind": "dot-home",
+        "name": ".roo",
+        "env": [
+          "ZOO_CONFIG_DIR",
+          "ROO_CONFIG_DIR"
+        ]
+      },
+      "localConfigDir": ".roo",
+      "configFormat": "none",
+      "artifactLayout": {
+        "global": [
+          {
+            "kind": "commands",
+            "destSubpath": "commands",
+            "prefix": "gsd-",
+            "nesting": "flat",
+            "recursive": false,
+            "converter": "convertClaudeCommandToZooCommand"
+          }
+        ],
+        "local": [
+          {
+            "kind": "commands",
+            "destSubpath": "commands",
+            "prefix": "gsd-",
+            "nesting": "flat",
+            "recursive": false,
+            "converter": "convertClaudeCommandToZooCommand"
+          }
+        ]
+      },
+      "triggerPrecedence": [
+        "commands"
+      ],
+      "commandStyle": "slash-hyphen",
+      "hooksSurface": "none",
+      "sandboxTier": "none",
+      "supportTier": 2,
+      "installSurface": "zoo-modes",
+      "writesSharedSettings": false,
+      "permissionWriter": null,
+      "extendedHookEvents": [],
+      "hostIntegration": {
+        "embeddingMode": "imperative",
+        "commandSurface": "slash-file",
+        "dispatch": {
+          "namedDispatch": true,
+          "nested": true,
+          "maxDepth": "undocumented",
+          "background": false,
+          "subagentToolkit": "read-only",
+          "backgroundDispatch": false,
+          "isolation": "undocumented",
+          "maxConcurrency": "undocumented"
+        },
+        "modelMode": "active",
+        "hookBus": "none",
+        "stateIO": "filesystem",
+        "transport": "mcp",
+        "runtime": "electron",
+        "effortSurface": "undocumented"
+      },
+      "hostBehaviors": {
+        "skipSharedHooksInstall": true,
+        "localTargetIsProjectRoot": true,
+        "zooModesSurface": true,
+        "reapplyCommand": "/gsd-update --reapply"
+      }
+    }
   }
 };
 
@@ -7886,6 +7969,89 @@ const runtimes = {
         "skipSharedHooksInstall": true
       }
     }
+  },
+  "zoo": {
+    "id": "zoo",
+    "role": "runtime",
+    "version": "1.14.0",
+    "title": "Zoo Code",
+    "description": "Zoo Code (VS Code extension, successor of the archived Roo Code) — custom modes (.roomodes / global custom_modes.yaml) + flat gsd-* slash commands under .roo/ paths; no hooks surface; tier-2 support.",
+    "tier": "core",
+    "requires": [],
+    "engines": {
+      "gsd": ">=1.14.0"
+    },
+    "runtime": {
+      "configHome": {
+        "kind": "dot-home",
+        "name": ".roo",
+        "env": [
+          "ZOO_CONFIG_DIR",
+          "ROO_CONFIG_DIR"
+        ]
+      },
+      "localConfigDir": ".roo",
+      "configFormat": "none",
+      "artifactLayout": {
+        "global": [
+          {
+            "kind": "commands",
+            "destSubpath": "commands",
+            "prefix": "gsd-",
+            "nesting": "flat",
+            "recursive": false,
+            "converter": "convertClaudeCommandToZooCommand"
+          }
+        ],
+        "local": [
+          {
+            "kind": "commands",
+            "destSubpath": "commands",
+            "prefix": "gsd-",
+            "nesting": "flat",
+            "recursive": false,
+            "converter": "convertClaudeCommandToZooCommand"
+          }
+        ]
+      },
+      "triggerPrecedence": [
+        "commands"
+      ],
+      "commandStyle": "slash-hyphen",
+      "hooksSurface": "none",
+      "sandboxTier": "none",
+      "supportTier": 2,
+      "installSurface": "zoo-modes",
+      "writesSharedSettings": false,
+      "permissionWriter": null,
+      "extendedHookEvents": [],
+      "hostIntegration": {
+        "embeddingMode": "imperative",
+        "commandSurface": "slash-file",
+        "dispatch": {
+          "namedDispatch": true,
+          "nested": true,
+          "maxDepth": "undocumented",
+          "background": false,
+          "subagentToolkit": "read-only",
+          "backgroundDispatch": false,
+          "isolation": "undocumented",
+          "maxConcurrency": "undocumented"
+        },
+        "modelMode": "active",
+        "hookBus": "none",
+        "stateIO": "filesystem",
+        "transport": "mcp",
+        "runtime": "electron",
+        "effortSurface": "undocumented"
+      },
+      "hostBehaviors": {
+        "skipSharedHooksInstall": true,
+        "localTargetIsProjectRoot": true,
+        "zooModesSurface": true,
+        "reapplyCommand": "/gsd-update --reapply"
+      }
+    }
   }
 };
 
@@ -8089,7 +8255,8 @@ const _requiresGraph = {
   "ui": [],
   "vscode": [],
   "windsurf": [],
-  "zcode": []
+  "zcode": [],
+  "zoo": []
 };
 
 function requiresClosure(id) {

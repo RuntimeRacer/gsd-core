@@ -247,13 +247,15 @@ describe('INSTALL_SURFACES export', () => {
     'codex-toml',
     'copilot-instructions',
     'cline-rules',
+    // 'zoo-modes' added #4746 — Zoo Code's dedicated custom-modes surface writer.
+    'zoo-modes',
     'cursor-hooks-json',
     'profile-marker-only',
     // 'none' added #2103 — vscode has no CLI install surface at all.
     'none',
   ]);
 
-  test('INSTALL_SURFACES contains exactly the 7 surface strings', () => {
+  test('INSTALL_SURFACES contains exactly the 8 surface strings', () => {
     assert.deepStrictEqual(new Set(INSTALL_SURFACES), EXPECTED_SURFACES);
   });
 });

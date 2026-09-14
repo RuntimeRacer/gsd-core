@@ -859,6 +859,8 @@ const VALID_CONVERTER_NAMES = new Set([
   'convertClaudeCommandToTraeSkill',
   'convertClaudeCommandToWindsurfSkill',
   'convertClaudeCommandToWindsurfWorkflow',
+  // #4746 — Zoo Code flat `.roo/commands/gsd-*.md` slash-command converter.
+  'convertClaudeCommandToZooCommand',
   // agent converters (#1173 — descriptor-driven agent conversion wiring)
   'convertClaudeAgentToCopilotAgent',
   'convertClaudeAgentToAntigravityAgent',
@@ -919,7 +921,11 @@ const DEFAULT_TRIGGER_PRECEDENCE = Object.freeze(['skills', 'commands']);
 const FEATURE_FIELDS_FORBIDDEN_ON_RUNTIME = ['skills', 'agents', 'steps', 'contributions', 'gates', 'hooks', 'activationKey'];
 // 'none' added #2103 — Marketplace/VSIX-distributed hosts (e.g. VS Code) that
 // are never CLI-installed (no allRuntimes membership, no install flag).
-const VALID_INSTALL_SURFACES = new Set(['settings-json', 'codex-toml', 'copilot-instructions', 'cline-rules', 'cursor-hooks-json', 'profile-marker-only', 'none']);
+// 'zoo-modes' added #4746 — Zoo Code's dedicated custom-modes surface writer
+// (.roomodes / global custom_modes.yaml). The zoo-modes writer owns modes, so
+// zoo writes no shared settings/config file — its configFormat pairs to 'none'
+// in the INSTALL_SURFACE_TO_CONFIG_FORMAT parity gate below.
+const VALID_INSTALL_SURFACES = new Set(['settings-json', 'codex-toml', 'copilot-instructions', 'cline-rules', 'zoo-modes', 'cursor-hooks-json', 'profile-marker-only', 'none']);
 // 'antigravity' added #2096 Phase B Upgrade 1 — settings.json permissions.allow writer.
 const VALID_PERMISSION_WRITERS = new Set(['opencode', 'kilo', 'antigravity']);
 // SubagentStart added #2092 Phase B Upgrade 2 (qwen-only today — see
@@ -1069,6 +1075,10 @@ const INSTALL_SURFACE_TO_ALLOWED_HOOKS_SURFACES = new Map([
   ['codex-toml',           new Set(['codex-hooks-json'])],
   ['copilot-instructions', new Set(['copilot-inline'])],
   ['cline-rules',          new Set(['cline-rules'])],
+  // 'zoo-modes' added #4746 — the zoo-modes surface owns custom-mode
+  // registration; zoo exposes no hooks at all (hooksSurface: 'none' — the
+  // engine owns the hook bus), so 'none' is its only legal pairing.
+  ['zoo-modes',            new Set(['none'])],
   ['cursor-hooks-json',    new Set(['cursor-hooks-json'])],
   ['profile-marker-only',  new Set(['none', 'kimi-hooks-toml', 'windsurf-hooks-json'])],
   // 'none' added #2103 — VS Code has no CLI install surface at all; its only
@@ -1963,6 +1973,10 @@ const KNOWN_HOST_BEHAVIORS = new Set([
   'unsupportedFeatures',
   'verificationStyle',
   'writeCategoryDescription',
+  // #4746 — Zoo Code's custom-modes surface (.roomodes / global
+  // custom_modes.yaml). Mirrors clineRulesSurface for cline: a dedicated
+  // mode-registration surface, not a settings/config-file surface.
+  'zooModesSurface',
 ]);
 
 /**
@@ -3847,6 +3861,11 @@ const INSTALL_SURFACE_TO_CONFIG_FORMAT = new Map([
   ['codex-toml',           'toml'],
   ['copilot-instructions', 'markdown'],
   ['cline-rules',          'markdown-dir'],
+  // 'zoo-modes' added #4746 — Zoo Code's dedicated custom-modes surface writer
+  // writes no settings/config file (modes go through the zoo-modes writer;
+  // commands are files), so the pairing is 'none' exactly like
+  // profile-marker-only / cursor-hooks-json.
+  ['zoo-modes',            'none'],
   ['cursor-hooks-json',    'none'],
   ['profile-marker-only',  'none'],
   // 'none' added #2103 — a runtime with NO CLI install surface at all (e.g.

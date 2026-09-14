@@ -31,6 +31,9 @@ const FALLBACK_ALIASES: Readonly<Record<string, string[]>> = {
   'kimi-code': ['kimi-code', 'kimicode', 'kimi_code'],
   codebuddy: ['codebuddy', 'codebuddy-cli'],
   cline: ['cline', 'cline-cli'],
+  // #4746 — Zoo Code (successor of the archived Roo Code): users still type the
+  // Roo-era names, so the Roo family canonicalizes to zoo alongside its own.
+  zoo: ['zoo', 'zoo-code', 'roo', 'roo-code', 'roo-cline'],
 };
 
 function normalizeRuntimeToken(value: string): string {
@@ -243,6 +246,8 @@ const RUNTIME_LABELS: Readonly<Record<string, string>> = {
   codebuddy: 'CodeBuddy',
   cline: 'Cline',
   zcode: 'ZCode',
+  // #4746 — Zoo Code (successor of the archived Roo Code).
+  zoo: 'Zoo Code',
   pi: 'pi',
   // #2103: vscode is a registered (role:runtime) capability for validator +
   // host-integration coverage, even though it is never CLI-installed (no
@@ -298,6 +303,8 @@ const GLOBAL_CONFIG_HOME_FRAGMENTS: Readonly<Record<string, string>> = {
   kimi:      "'.config', 'agents'",
   'kimi-code': "'.kimi-code'",
   zcode:     "'.zcode'",
+  // #4746 — zoo's global config home is ~/.roo (dot-home .roo).
+  zoo:       "'.roo'",
   // pi's global config home is ~/.pi/agent (configHome: dot-home-nested,
   // parent '.pi', name 'agent' — capabilities/pi/capability.json), matching
   // resolveConfigHomeFromDescriptor's `path.join(home, parent, name)` for the
@@ -333,6 +340,8 @@ export function getGlobalConfigHomeFragment(runtime: string): string {
 const RUNTIME_FLAG_IDS = Object.freeze([
   'opencode', 'kilo', 'codex', 'copilot', 'antigravity', 'cursor',
   'windsurf', 'augment', 'trae', 'qwen', 'hermes', 'codebuddy', 'cline', 'kimi', 'kimi-code', 'zcode', 'pi',
+  // #4746 — Zoo Code is CLI-installable (installSurface 'zoo-modes', not 'none').
+  'zoo',
 ] as const);
 
 /**

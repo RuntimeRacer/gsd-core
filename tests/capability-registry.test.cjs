@@ -4639,8 +4639,8 @@ describe('ADR-857 phase 5e: configFormat ↔ installSurface parity gate', () => 
     );
   });
 
-  // All 16 real runtime descriptors must pass the parity gate (true-negative)
-  test('all 16 real runtime descriptors pass the configFormat parity gate (DOES NOT THROW)', () => {
+  // All 20 real runtime descriptors must pass the parity gate (true-negative)
+  test('all 20 real runtime descriptors pass the configFormat parity gate (DOES NOT THROW)', () => {
     const { capMap, errors } = loadAndValidate(new Set());
     const hardErrors = errors.filter((e) => !e.includes('pending-migration'));
     assert.deepEqual(hardErrors, [], 'No hard errors expected: ' + JSON.stringify(hardErrors));
@@ -4648,12 +4648,12 @@ describe('ADR-857 phase 5e: configFormat ↔ installSurface parity gate', () => 
     // runConfigFormatParityGate must not throw for the real registry
     assert.doesNotThrow(
       () => runConfigFormatParityGate(capMap),
-      'runConfigFormatParityGate must not throw for the real 16 runtime descriptors',
+      'runConfigFormatParityGate must not throw for the real 20 runtime descriptors',
     );
   });
 
   // buildRegistry must not throw for the real registry (end-to-end integration)
-  test('buildRegistry with real 16 runtime descriptors does not throw (parity gate integrated)', () => {
+  test('buildRegistry with real 20 runtime descriptors does not throw (parity gate integrated)', () => {
     const { capMap } = loadAndValidate(new Set());
     assert.doesNotThrow(
       () => buildRegistry(capMap),
@@ -4662,13 +4662,15 @@ describe('ADR-857 phase 5e: configFormat ↔ installSurface parity gate', () => 
   });
 
   // INSTALL_SURFACE_TO_CONFIG_FORMAT export check
-  test('INSTALL_SURFACE_TO_CONFIG_FORMAT covers all 7 installSurface values with correct mappings', () => {
+  test('INSTALL_SURFACE_TO_CONFIG_FORMAT covers all 8 installSurface values with correct mappings', () => {
     assert.ok(INSTALL_SURFACE_TO_CONFIG_FORMAT instanceof Map, 'Must be a Map');
-    assert.strictEqual(INSTALL_SURFACE_TO_CONFIG_FORMAT.size, 7, 'Must cover 7 installSurface values');
+    assert.strictEqual(INSTALL_SURFACE_TO_CONFIG_FORMAT.size, 8, 'Must cover 8 installSurface values');
     assert.strictEqual(INSTALL_SURFACE_TO_CONFIG_FORMAT.get('settings-json'),        'settings-json');
     assert.strictEqual(INSTALL_SURFACE_TO_CONFIG_FORMAT.get('codex-toml'),           'toml');
     assert.strictEqual(INSTALL_SURFACE_TO_CONFIG_FORMAT.get('copilot-instructions'), 'markdown');
     assert.strictEqual(INSTALL_SURFACE_TO_CONFIG_FORMAT.get('cline-rules'),          'markdown-dir');
+    // 'zoo-modes' added #4746 — dedicated surface writer, no config file written.
+    assert.strictEqual(INSTALL_SURFACE_TO_CONFIG_FORMAT.get('zoo-modes'),            'none');
     assert.strictEqual(INSTALL_SURFACE_TO_CONFIG_FORMAT.get('cursor-hooks-json'),    'none');
     assert.strictEqual(INSTALL_SURFACE_TO_CONFIG_FORMAT.get('profile-marker-only'),  'none');
     // 'none' added #2103 — a runtime with no CLI install surface at all (e.g.
@@ -4898,9 +4900,9 @@ describe('ADR-857 phase 5f: cross-field consistency gate rejection tests (DEFECT
   });
 
   // Verify the new constants are well-formed
-  test('INSTALL_SURFACE_TO_ALLOWED_HOOKS_SURFACES covers all 7 installSurface values', () => {
+  test('INSTALL_SURFACE_TO_ALLOWED_HOOKS_SURFACES covers all 8 installSurface values', () => {
     assert.ok(INSTALL_SURFACE_TO_ALLOWED_HOOKS_SURFACES instanceof Map, 'Must be a Map');
-    assert.strictEqual(INSTALL_SURFACE_TO_ALLOWED_HOOKS_SURFACES.size, 7, 'Must cover 7 installSurface values');
+    assert.strictEqual(INSTALL_SURFACE_TO_ALLOWED_HOOKS_SURFACES.size, 8, 'Must cover 8 installSurface values');
     for (const installSurface of VALID_INSTALL_SURFACES) {
       assert.ok(
         INSTALL_SURFACE_TO_ALLOWED_HOOKS_SURFACES.has(installSurface),

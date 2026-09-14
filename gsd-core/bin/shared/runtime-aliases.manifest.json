@@ -75,5 +75,12 @@
   "cline": [
     "cline",
     "cline-cli"
+  ],
+  "zoo": [
+    "zoo",
+    "zoo-code",
+    "roo",
+    "roo-code",
+    "roo-cline"
   ]
 }
