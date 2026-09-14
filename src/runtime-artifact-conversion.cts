@@ -2809,6 +2809,151 @@ function convertClaudeAgentToZcodeAgent(content) {
   return out.join('\n');
 }
 
+// ── Zoo Code converters (#4746) ─────────────────────────────────────────────
+// Zoo Code is the successor of the archived Roo Code (dot-home `.roo` —
+// Zoo still reads `.roo` paths today; a `.zoo` folder does not exist,
+// roomodes-style `customModes:` schema — see Zoo-Code-Org/Zoo-Code
+// schemas/roomodes.json). `convertClaudeAgentToZooModeEntry` produces a
+// STRUCTURED mode-entry object (NOT YAML — the Phase 4 surface writer
+// serializes it), ported from bin/install.js's `installRooModes` roleDefinition
+// pipeline (harmony-ai-solutions/gsd-roo-code). The old fork's hardcoded
+// per-agent `agentModeMap` metadata (curated name/groups/whenToUse) is
+// intentionally NOT ported: name/whenToUse now derive from the agent's own
+// frontmatter and groups use the old fork's generic default.
+
+/**
+ * #4746 — Zoo mode-entry slug from a source agent stem/file name.
+ * `deriveAgentName` already returns the gsd- prefixed stem for shipped agents
+ * ('gsd-executor.md' → 'gsd-executor'), so the slug is the stem itself; a bare
+ * (non-gsd-) stem is re-prefixed to keep the GSD namespace.
+ */
+function _zooModeSlugFromStem(stem) {
+  const cleaned = String(stem || '').trim().replace(/\.md$/, '');
+  if (cleaned === '') return 'gsd-agent';
+  return cleaned.startsWith('gsd-') ? cleaned : `gsd-${cleaned}`;
+}
+
+/**
+ * #4746 — Zoo mode-entry display-name fallback: stem with `-` split and words
+ * capitalized. Port of bin/install.js installRooModes' `agentModeMap` fallback
+ * line (`file.replace('.md','').split('-').map(...).join(' ')`).
+ */
+function _zooModeNameFromStem(stem) {
+  const cleaned = String(stem || '').trim().replace(/\.md$/, '');
+  if (cleaned === '') return 'GSD Agent';
+  return cleaned.split('-').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+}
+
+/**
+ * #4746 — Path rewrites for Zoo artifacts. Port of bin/install.js
+ * `replacePathsForRoo` (harmony-ai-solutions/gsd-roo-code), EXACT regex
+ * semantics preserved:
+ *   /~\/\.claude\/?/g      → pathPrefix  (matches `~/.claude/` AND `~/.claude`)
+ *   /\$HOME\/\.claude\/?/g → pathPrefix  (`$HOME/.claude/` AND `$HOME/.claude`)
+ *   /\.\/\.claude\//g      → `./.roo/`   (old-fork local-path vector)
+ * The trailing-slash-optional forms are the 4134ae8 regression fix (the old
+ * fork previously only handled the trailing-slash forms).
+ *
+ * All-or-nothing: when `pathPrefix` is absent or does not look like a path
+ * (e.g. the layout's name-dispatch passes a commandName as arg2 — no path
+ * contains a slash-free token), NO rewrite is applied. The install-time
+ * pathPrefix rewrites are then owned by `_applyRuntimeRewrites`'s `case 'zoo':`
+ * seam (decision C in #4746), which runs after staging in the real install
+ * pipeline and applies the runtime-correct local dir (`./.roo/`) for the
+ * `./.claude/` form.
+ */
+function replacePathsForZoo(content, pathPrefix) {
+  if (typeof pathPrefix !== 'string' || pathPrefix === '' || !pathPrefix.includes('/')) {
+    return content;
+  }
+  content = content.replace(/~\/\.claude\/?/g, pathPrefix);
+  content = content.replace(/\$HOME\/\.claude\/?/g, pathPrefix);
+  content = content.replace(/\.\/\.claude\//g, './.roo/');
+  return content;
+}
+
+/**
+ * #4746 — Convert a Claude Code agent (.md) to a Zoo Code custom-mode ENTRY.
+ * NOT YAML — returns a structured mode-entry object
+ * `{ slug, name, roleDefinition, whenToUse?, groups }` the Phase 4 surface
+ * writer serializes (`customModes:` top-level key, `  - slug:` 2-space
+ * entries, `roleDefinition: |` literal block — verified against Zoo's
+ * schemas/roomodes.json). `source` is intentionally NOT included: the writer
+ * derives it from the install scope (global vs project).
+ *
+ * Ported from bin/install.js `installRooModes` (harmony-ai-solutions/gsd-roo-code),
+ * roleDefinition pipeline order preserved exactly:
+ *   1. frontmatter-stripped body, trimmed, CRLF→LF normalized
+ *   2. path rewrites (replacePathsForZoo — port of replacePathsForRoo)
+ *   3. /gsd:xxx → /gsd-xxx
+ *   4. "Claude Code" → "Zoo Code" via the shared applyClaudeCodeBrandSwap
+ *      helper (skips <runtime_compatibility> protected regions, #2284(b))
+ *   5. neutralizeAgentReferences(..., null) — standalone "Claude" → "the
+ *      agent"; CLAUDE.md is untouched (null instructionFile, exactly as the
+ *      old fork's `neutralizeAgentReferences(roleDefinition, null)`)
+ *   6. backtick tool-name swaps in role prose, exactly these four:
+ *      `Read` tool → `read_file` tool, Write→write_to_file, Edit→apply_diff,
+ *      Bash→execute_command
+ *
+ * The old fork's `updateProjectInstructionsForRoo` trailing-note appends are
+ * NOT ported (Roo-era workarounds; the shared brand-swap + neutralization cover
+ * the need).
+ *
+ * @param content  raw Claude agent markdown
+ * @param opts     optional — boolean isGlobal (layout name-dispatch compat) or
+ *                 an options bag:
+ *                   pathPrefix: install-time trailing-slash prefix for the
+ *                     `~/.claude` / `$HOME/.claude` rewrites; when absent the
+ *                     path step is skipped (the agents pipeline's
+ *                     applyAgentPathRewrites agentCtx Step 1 already applied the
+ *                     real install-time prefix before this converter runs).
+ *                   fileName:  source file name (e.g. 'gsd-executor.md'); the
+ *                     slug derives via deriveAgentName.
+ *                   agentName: pre-derived stem (e.g. 'gsd-executor') — the same
+ *                     value stageAgentsForRuntimeWithConverter passes as
+ *                     meta.agentName; takes precedence over fileName.
+ * @param meta       optional — the stager's per-file `{ agentName }` context
+ *                   (stageAgentsForRuntimeWithConverter's 3rd positional arg
+ *                   when agentCtx is threaded); agentName takes precedence over
+ *                   both opts.fileName and the frontmatter `name` fallback.
+ * @returns {{ slug: string, name: string, roleDefinition: string, whenToUse?: string, groups: string[] }}
+ */
+function convertClaudeAgentToZooModeEntry(content, opts, meta) {
+  const bag = typeof opts === 'boolean' ? { isGlobal: opts } : (opts && typeof opts === 'object' ? opts : {});
+  const { pathPrefix, fileName, agentName } = bag;
+
+  const { frontmatter, body } = extractFrontmatterAndBody(content);
+  const rawBody = (body || content).replace(/\r\n/g, '\n').trim();
+
+  let roleDefinition = replacePathsForZoo(rawBody, pathPrefix);
+  roleDefinition = roleDefinition.replace(/\/gsd:([a-z][a-z0-9-]*)/g, '/gsd-$1');
+  roleDefinition = applyClaudeCodeBrandSwap(roleDefinition, 'Zoo Code');
+  roleDefinition = neutralizeAgentReferences(roleDefinition, null);
+  roleDefinition = roleDefinition.replace(/`Read` tool/g, '`read_file` tool');
+  roleDefinition = roleDefinition.replace(/`Write` tool/g, '`write_to_file` tool');
+  roleDefinition = roleDefinition.replace(/`Edit` tool/g, '`apply_diff` tool');
+  roleDefinition = roleDefinition.replace(/`Bash` tool/g, '`execute_command` tool');
+
+  const fmName = frontmatter
+    ? (extractFrontmatterField(frontmatter, 'name') || extractFrontmatterField(frontmatter, 'title'))
+    : null;
+  const stem = (meta && typeof meta === 'object' && typeof meta.agentName === 'string' && meta.agentName !== ''
+    ? meta.agentName
+    : null) || agentName || (fileName ? deriveAgentName(fileName) : null) || fmName || '';
+
+  const entry = {
+    slug: _zooModeSlugFromStem(stem),
+    name: fmName || _zooModeNameFromStem(stem),
+    roleDefinition,
+    groups: ['read', 'edit', 'command', 'mcp'],
+  };
+  if (frontmatter) {
+    const whenToUse = toSingleLine(extractFrontmatterField(frontmatter, 'description') || '');
+    if (whenToUse) entry.whenToUse = whenToUse;
+  }
+  return entry;
+}
+
 function convertClaudeAgentToCodebuddyAgent(content) {
   const converted = convertClaudeToCodebuddyMarkdown(content);
 
@@ -2963,6 +3108,86 @@ function convertClaudeCommandToKiloSkill(content, skillName) {
     skillName,
     (c) => convertClaudeToKiloFrontmatter(c),
   );
+}
+
+/**
+ * #4746 — Convert a Claude Code command (.md) to a Zoo Code slash command.
+ * Ported from bin/install.js `convertCommandForRoo` / `replacePathsForRoo`
+ * (harmony-ai-solutions/gsd-roo-code), preserving semantics exactly:
+ *   1. Frontmatter is rebuilt to `description:` only (LF output; CRLF input
+ *      normalized to LF inside the frontmatter branch).
+ *   2. Tool mapping AFTER `- ` bullet prefixes only (lookbehind-guarded, so
+ *      bare-prose tool mentions are deliberately NOT rewritten):
+ *      Read→read_file, Write→write_to_file, Edit→apply_diff, Bash→execute_command,
+ *      Glob→list_files, Grep→search_files, Task→new_task,
+ *      AskUserQuestion→ask_followup_question, TodoWrite→update_todo_list.
+ *      (Tool table verified against Zoo-Code-Org/Zoo-Code
+ *      packages/types/src/tool.ts — all still valid.)
+ *   3. `/gsd:xxx` → `/gsd-xxx` (hardcoded regex, same as the port source).
+ *   4. Path rewrites (replacePathsForZoo — port of replacePathsForRoo):
+ *      `~/.claude/` + `~/.claude`, `$HOME/.claude/` + `$HOME/.claude` →
+ *      pathPrefix; `./.claude/` → `./.roo/`.
+ *   5. "Claude Code" → "Zoo Code" via the shared applyClaudeCodeBrandSwap
+ *      helper (skips <runtime_compatibility> protected regions, #2284(b)).
+ *
+ * The old fork's `updateProjectInstructionsForRoo` trailing-note append blocks
+ * are NOT ported (Roo-era workarounds; the shared brand-swap + neutralization
+ * cover the need).
+ *
+ * Signature: (content, pathPrefix) per the port source, with sibling-style
+ * trailing params so name-dispatch by the layout (convertedCommandsKind) is
+ * harmless: a commandName passed as arg2 does not look like a path (no '/'),
+ * so the path-rewrite step is skipped and the install-time pathPrefix rewrites
+ * are applied by `_applyRuntimeRewrites`'s `case 'zoo':` seam instead (decision
+ * C in #4746).
+ *
+ * @param content     Claude command markdown (YAML frontmatter + body)
+ * @param pathPrefix  trailing-slash path prefix for global `.claude` refs
+ *                    (e.g. '/home/user/.roo/'); skipped when not a path
+ * @param _runtime    unused — sibling-converter compatibility
+ * @param cmdNames    unused — sibling-converter compatibility (the port source
+ *                    uses a hardcoded `/gsd:([a-z][a-z0-9-]*)` regex, not the
+ *                    command-roster)
+ * @returns {string} converted command markdown
+ */
+function convertClaudeCommandToZooCommand(content, pathPrefix, _runtime = null, cmdNames = null) {
+  // Step 1: parse + rebuild frontmatter (handles LF and CRLF sources; output LF).
+  const fmMatch = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n/);
+  if (fmMatch) {
+    const fmRaw = fmMatch[1];
+    const descMatch = fmRaw.match(/^description:\s*["']?(.*?)["']?\s*$/m);
+    const description = descMatch ? descMatch[1].trim() : 'GSD slash command';
+    const newFrontmatter = `---\ndescription: "${description}"\n---\n`;
+    content = content.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, newFrontmatter);
+    content = content.replace(/\r\n/g, '\n');
+  }
+
+  // Step 2: tool-name mapping in body, only after "- " bullet prefixes.
+  const toolMap = {
+    'Read': 'read_file',
+    'Write': 'write_to_file',
+    'Edit': 'apply_diff',
+    'Bash': 'execute_command',
+    'Glob': 'list_files',
+    'Grep': 'search_files',
+    'Task': 'new_task',
+    'AskUserQuestion': 'ask_followup_question',
+    'TodoWrite': 'update_todo_list',
+  };
+  for (const [claude, zoo] of Object.entries(toolMap)) {
+    content = content.replace(new RegExp(`(?<=- )${claude}\\b`, 'g'), zoo);
+  }
+
+  // Step 3: /gsd:xxx → /gsd-xxx.
+  content = content.replace(/\/gsd:([a-z][a-z0-9-]*)/g, '/gsd-$1');
+
+  // Step 4: path rewrites (port of replacePathsForRoo).
+  content = replacePathsForZoo(content, pathPrefix);
+
+  // Step 5: brand swap "Claude Code" → "Zoo Code" (shared helper, #2284(b)).
+  content = applyClaudeCodeBrandSwap(content, 'Zoo Code');
+
+  return content;
 }
 
 
@@ -3384,6 +3609,27 @@ function _applyRuntimeRewrites(content, runtime, pathPrefix, isGlobal = false, a
       content = content.replace(/\$HOME\/\.claude\//g, pathPrefix);
       content = content.replace(/\.\/\.claude\//g, `./${dirName}/`);
       content = restoreClaudeGlobalAtRefTilde(content, pathPrefix);
+      content = processAttribution(content, attribution);
+      break;
+
+    case 'zoo':
+      // #4746 (decision C): Zoo Code (Roo's successor) installs slash commands
+      // as flat `.md` under `.roo/commands/` via the layout name-dispatch
+      // converter convertClaudeCommandToZooCommand — whose `(content, pathPrefix)`
+      // port only applies path rewrites when arg2 looks like a path (a
+      // commandName from stageCommandsForRuntimeFlat does not), so THIS pass is
+      // the owner of install-time-correct pathPrefix rewrites + attribution for
+      // zoo, mirroring how cline/kilo consume the seam and the zcode case
+      // (#4002). Local `./.claude/` → `./.roo/` via dirName
+      // (getDirName('zoo') → '.roo'; Zoo still reads `.roo` paths today).
+      // No `@~`-restore: the port source
+      // (replacePathsForRoo) had none, and Zoo's roomodes roleDefinition is
+      // prose, not Claude-style `@`-imports.
+      content = content.replace(/~\/\.claude\//g, pathPrefix);
+      content = content.replace(/\$HOME\/\.claude\//g, pathPrefix);
+      content = content.replace(/\.\/\.claude\//g, `./${dirName}/`);
+      content = content.replace(/~\/\.claude(?![\w-])/g, normalizedPathPrefix);
+      content = content.replace(/\$HOME\/\.claude(?![\w-])/g, normalizedPathPrefix);
       content = processAttribution(content, attribution);
       break;
 
@@ -3891,6 +4137,12 @@ export = {
   neutralizeAgentReferences,
   convertClaudeCommandToOpencodeSkill,
   convertClaudeCommandToKiloSkill,
+  // #4746: Zoo Code slash-command converter — port of the Roo-era
+  // convertCommandForRoo/replacePathsForRoo (harmony-ai-solutions/gsd-roo-code).
+  // Registered by name so convertedCommandsKind's
+  // conversionExports[converterName] dispatch (runtime-artifact-layout.cts)
+  // can resolve it from capabilities/zoo/capability.json's commands kind.
+  convertClaudeCommandToZooCommand,
   filterRuntimeNotesForTarget,
   // #2087 — opencode/kilo command-frontmatter converters, exported so the
   // layout-driven `convertedCommandsKind` can resolve them by name (routes the
@@ -3932,6 +4184,12 @@ export = {
   // conversionExports[converterName] dispatch, resolved from
   // capabilities/zcode/capability.json's agents kind.
   convertClaudeAgentToZcodeAgent,
+  // #4746: Zoo Code custom-mode entry converter (Roo Code's successor).
+  // Returns a STRUCTURED mode-entry object (not YAML) — the Phase 4 surface
+  // writer serializes it to `customModes:` (roomodes.json / roomodes.yaml).
+  // Registered by name for the same conversionExports[converterName] dispatch,
+  // resolved from capabilities/zoo/capability.json's agents kind.
+  convertClaudeAgentToZooModeEntry,
   // #1511 ADR-1508 Phase 2: rewrite engine deep seam
   // Low-level walkers (pathPrefix + attribution pre-resolved by caller):
   applyRuntimeContentRewritesInPlace,
