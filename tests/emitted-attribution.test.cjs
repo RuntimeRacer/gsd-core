@@ -1842,31 +1842,43 @@ test('rejects a registered runtime with no fixture, naming it', () => {
 
 // ── The absolute floor: limit-1 / limit / limit+1 ────────────────────────────
 
+// #4746: the family universe grows with every added runtime (zoo made it 20 while
+// the floor stays 19), so below-floor constructions must be derived from
+// MINIMUM_MANIFEST_FAMILIES — a hardcoded "minus one" set silently stops being
+// below the floor the next time a runtime lands. claude-local is name-pinned
+// (MISSING_CLAUDE_LOCAL) and is never the family dropped to shrink the universe.
+function shrunkenUniverse(targetCount) {
+  const drop = ALL_FAMILIES.length - targetCount;
+  assert.ok(drop > 0, 'shrunken universe must actually be smaller than the real one');
+  const droppable = ALL_FAMILIES.filter((n) => n !== 'claude-local').slice(0, drop);
+  return ALL_FAMILIES.filter((n) => n === 'claude-local' || !droppable.includes(n));
+}
+
 test('floor is enforced at limit-1 / limit / limit+1', () => {
-  const eighteen = ALL_FAMILIES.filter((n) => n !== 'trae');          // limit-1
-  const twenty = [...ALL_FAMILIES, 'qoder'];                          // limit+1
+  const belowFloorNames = shrunkenUniverse(MINIMUM_MANIFEST_FAMILIES - 1); // limit-1
+  const aboveFloorNames = [...ALL_FAMILIES, 'qoder'];                     // limit+1
 
   const below = reconcileWith({
-    derivedNames: eighteen, baselineNames: eighteen, currentNames: eighteen,
+    derivedNames: belowFloorNames, baselineNames: belowFloorNames, currentNames: belowFloorNames,
   });
   assert.equal(below.ok, false);
   assert.ok(codesOf(below).includes(FAMILY_REASON.BELOW_FLOOR));
 
-  assert.deepEqual(reconcileWith({}), { ok: true, errors: [] });      // limit == 19
+  assert.deepEqual(reconcileWith({}), { ok: true, errors: [] });  // at/above the floor (full universe)
 
   const above = reconcileWith({
-    derivedNames: twenty, baselineNames: twenty, currentNames: twenty,
+    derivedNames: aboveFloorNames, baselineNames: aboveFloorNames, currentNames: aboveFloorNames,
   });
   assert.deepEqual(above, { ok: true, errors: [] });
 });
 
 test('a uniformly shrunken universe fails on the floor', () => {
-  // The Goodhart move the old literal permitted: drop a runtime AND its fixture together
-  // and lower the constant, and 18 === 18 passes over a smaller world.
-  const eighteen = ALL_FAMILIES.filter((n) => n !== 'trae');
+  // The Goodhart move the old literal permitted: drop runtimes AND their fixtures together
+  // and lower the constant, and a same-count world passes over a smaller universe.
+  const shrunken = shrunkenUniverse(MINIMUM_MANIFEST_FAMILIES - 1);
   const r = reconcileWith({
-    derivedNames: eighteen, fixtureNames: eighteen,
-    baselineNames: eighteen, currentNames: eighteen,
+    derivedNames: shrunken, fixtureNames: shrunken,
+    baselineNames: shrunken, currentNames: shrunken,
     changedPaths: REGISTRY_CHANGE,
   });
   assert.equal(r.ok, false);

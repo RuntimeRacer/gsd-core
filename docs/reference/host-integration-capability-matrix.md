@@ -769,6 +769,43 @@ EoS migration status (#2101, ADR-1239): ZCode's install is fully dogfooded throu
 
 ---
 
+## zoo
+
+> Zoo Code — the community continuation of the archived Roo Code (May 2026); VS Code extension
+> (`ZooCodeOrganization.zoo-code`). Still reads `.roo` paths (`.roomodes`, `.roo/commands/`);
+> a `.zoo` folder does not exist (#4746).
+
+| Axis | Value | Source | Evidence |
+|---|---|---|---|
+| embeddingMode | imperative | https://docs.zoocode.dev/features/custom-modes | Modes are injected as roleDefinition system-prompt sections driven by extension state — behavior is steered through config + extension, with no in-process plugin API shipped yet. |
+| commandSurface | slash-file | https://docs.zoocode.dev/features/slash-commands | "workflow markdown files (with .md, .markdown, or .txt extensions) are invoked as slash commands using their filename" — flat `.roo/commands/*.md`, project overrides global. |
+| modelMode | active | https://docs.zoocode.dev (settings: API providers) | The extension owns provider/model configuration in its settings panel and applies the active model to every mode/subtask. |
+| hookBus | none | Zoo-Code-Org/Zoo-Code shipped bundle (grep, #4746) | No hook/lifecycle event system exists (0 references in the v3.83 bundle); nothing comparable to Cline v3.36+ hooks. |
+| stateIO | filesystem | https://docs.zoocode.dev/features/custom-modes | Modes/commands/rules are plain files (`.roomodes`, `.roo/`, globalStorage `custom_modes.yaml`) read from the workspace and user dirs. |
+| transport | mcp | https://docs.zoocode.dev/advanced-usage/available-tools/tool-use-overview | MCP is exposed through the generic `use_mcp_tool` / `access_mcp_resource` tools. |
+| runtime | electron | https://open-vsx.org/api/ZooCodeOrganization/zoo-code | VS Code extension (Electron extension host), successor of Roo Code. |
+| effortSurface | undocumented | per-host reasoning-effort survey (#2481), re-verified for #4746 | Zoo's documentation states no reasoning-effort setting; the axis carries the fail-closed sentinel rather than inheriting a profile baseline. |
+| dispatch.namedDispatch | true | https://docs.zoocode.dev/advanced-usage/available-tools/new-task | `new_task` takes a required `mode` (mode slug) + `message` — dispatch is by named mode. |
+| dispatch.nested | true | https://docs.zoocode.dev/advanced-usage/available-tools/new-task | "deeply nested subtasks" are possible (cited as a limitation by the docs, i.e. the primitive exists). |
+| dispatch.maxDepth | undocumented | https://docs.zoocode.dev/advanced-usage/available-tools/new-task | No maximum nesting depth is documented. |
+| dispatch.background | false | https://docs.zoocode.dev/advanced-usage/available-tools/new-task | The parent task PAUSES while the subtask runs and resumes via `finishSubTask()` — not a background primitive. |
+| dispatch.subagentToolkit | read-only | https://docs.zoocode.dev/advanced-usage/available-tools/new-task + #4746 fail-closed survey | Subtasks run in their selected mode with inherited workspace config; no documented full-toolkit delegation guarantee for orchestrator pipelines, so the axis fails closed to `read-only`. |
+| dispatch.backgroundDispatch | false | https://docs.zoocode.dev/advanced-usage/available-tools/new-task | Parent pauses per `new_task`; there is no documented fire-and-continue dispatch. |
+| dispatch.isolation | undocumented | not researched / no concurrent fan-out documented for this axis | No authoritative source for concurrent-executor isolation on this host — fails closed to `none` (sequential) in negotiation (#2584). |
+| dispatch.maxConcurrency | undocumented | not researched / no documented concurrent-subagent capacity for this axis | No authoritative source for concurrent-subagent capacity on this host — fails closed to `1` in negotiation (#3673). |
+
+Sources consulted:
+- https://docs.zoocode.dev/features/slash-commands
+- https://docs.zoocode.dev/features/custom-modes
+- https://docs.zoocode.dev/advanced-usage/available-tools/new-task
+- https://docs.zoocode.dev/advanced-usage/available-tools/tool-use-overview
+- https://open-vsx.org/api/ZooCodeOrganization/zoo-code
+- Zoo-Code-Org/Zoo-Code `main`: `schemas/roomodes.json`, `packages/types/src/mode.ts`, `packages/types/src/tool.ts`, `src/package.json` + shipped v3.83 bundle grep (#4746)
+
+**GSD integration status — `zoo-modes` surface (#4746).** Zoo installs through a dedicated `zoo-modes` config surface (the cline-rules precedent): every GSD agent becomes a `customModes:` entry (project `.roomodes`, or global `custom_modes.yaml` under `Code/User/globalStorage/zoocodeorganization.zoo-code/settings/`), merged marker-free with user modes; commands land as flat `.roo/commands/gsd-*.md`. Dispatch stays flattened (deliberate): `shouldFlattenDispatch(zoo)` returns `true` — `new_task` pauses the parent and the subagent toolkit fails closed to read-only, so waves run inline like cline/kimi-code.
+
+---
+
 ## pi
 
 > pi (pi.dev) is a bun-runtime Programmatic-CLI: it exposes an in-process TypeScript `ExtensionAPI` (`registerCommand`/`registerTool`/`registerProvider`/`pi.on`) rather than a settings-file or slash-markdown surface. GSD ships a single native-extension file (`pi/gsd.cjs`) installed to `~/.pi/agent/extensions/gsd.js` (global) or `.pi/extensions/gsd.js` (local) — the programmatic-CLI peer of the OpenCode/Kilo native-plugin binding. **Sourcing note:** the citations below are the pi.dev documentation pages named in ADR-1239 Stage 1 (#2102) as the source for each axis; this environment did not have live doc-fetch access at authoring time, so the Evidence column below is a paraphrase of pi's documented extension model rather than a verbatim excerpt — a maintainer with Context7/web access should verify the exact wording before treating this section as fully cited (flagged in the #2102 PR). **Partially discharged (#2470, 2026-07-20):** pi's extension-loader contract specifically has now been read at source — `packages/coding-agent/src/core/extensions/loader.ts` in `earendil-works/pi` — confirming `discoverExtensionsInDir()` keeps only names passing `isExtensionFile()` (`.ts`/`.js`, everything else skipped silently), that accepted files load via `jiti` (CommonJS and ESM alike), and that explicit `settings.json` paths bypass the filter. The remaining axes below are still paraphrase.

@@ -73,12 +73,14 @@ const DISPATCH_KEYS = ['namedDispatch', 'nested', 'maxDepth', 'background', 'sub
 const RUNTIME_IDS = Object.keys(registry.runtimes);
 
 // Contract-pinned profile split (derived from .host-cli-final.json):
-// programmatic-cli: claude, cline, cursor, hermes, kilo, kimi, opencode, pi, qwen, trae (10)
+// programmatic-cli: claude, cline, cursor, hermes, kilo, kimi, opencode, pi, qwen, trae, zoo (11)
 // declarative-cli:  antigravity, augment, codebuddy, codex, copilot, kimi-code, windsurf, zcode (8)
 // kimi-code moved programmatic-cli → declarative-cli in #2603: its plugin surface is a
 // `kimi.plugin.json` manifest plus markdown Skills with no in-process programmatic API
 // (docs/en/customization/plugins.md), the same shape as codex. The value had been inherited
 // from the Python `kimi` descriptor rather than sourced for Kimi Code CLI.
+// zoo joined programmatic-cli in #4746: like cline (its closest analog), it is a VS Code
+// extension host with an imperative embedding surface.
 // ide: vscode (1) — #2103, the first installed ide-profile host.
 const EXPECTED_PROFILES = {
   claude:      'programmatic-cli',
@@ -91,6 +93,7 @@ const EXPECTED_PROFILES = {
   pi:          'programmatic-cli',
   qwen:        'programmatic-cli',
   trae:        'programmatic-cli',
+  zoo:         'programmatic-cli',
   antigravity: 'declarative-cli',
   augment:     'declarative-cli',
   codebuddy:   'declarative-cli',
@@ -350,6 +353,11 @@ describe('ADR-1239 Phase A: hostIntegration descriptors', () => {
     trae:        true,
     windsurf:    true,
     zcode:       true,
+    // #4746: Zoo's new_task PAUSES the parent (background:false) and its
+    // subagentToolkit is 'read-only' with an undocumented depth budget — it
+    // cannot host the nested plan-checker/executor/verifier pipeline →
+    // force-flattened, mirroring the kimi-code (#2454/#2939) precedent.
+    zoo:         true,
     // #2103: vscode's dispatch.backgroundDispatch is 'undocumented' (no
     // documented background-subagent primitive) → fails closed to false →
     // force-flattened, mirroring the pi (#2102) precedent above.

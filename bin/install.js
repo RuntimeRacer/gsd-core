@@ -6893,7 +6893,12 @@ function zooYamlScalar(s) {
   if (s === null || s === undefined || s === '') return '""';
   const str = String(s);
   if (
-    /[:#\[\]{},|>&*!'"\\%@`]/.test(str) ||
+    // The backtick member is written as the \u0060 escape, NOT a literal "`":
+    // a literal backtick in a regex literal flips the naive backtick-pairing
+    // stripper in tests/claude-imperative-reference.test.cjs's AC2 scan (it
+    // treats every ` as a template-literal delimiter), which then mis-parses
+    // downstream code as live text. Same character class, no literal delimiter.
+    /[:#\[\]{},|>&*!'"\\%@\u0060]/.test(str) ||
     /^\s|\s$/.test(str) ||
     /^(true|false|null|yes|no|on|off)$/i.test(str)
   ) {

@@ -82,6 +82,11 @@ const PATH_RETURNING_FNS = [
   'getPathX',
   'normalizeInstallRelativePath',
   'toPosixPath',
+  // #4746 (zoo runtime): resolves the Zoo Code custom-modes target file
+  // (global: <vscodeUserDir>/globalStorage/zoocodeorganization.zoo-code/
+  // settings/custom_modes.yaml; local: <projectRoot>/.roomodes) — path-returning
+  // installer helper in bin/install.js.
+  'resolveZooModesPath',
 ];
 
 /**

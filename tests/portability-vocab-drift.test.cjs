@@ -52,6 +52,9 @@ const INSTALL_JS_PATH_HELPERS = [
   '_resolveSkillsRootDir',
   // #3664: shared kind-destination resolver (skills/agents/kimi-agents kinds).
   '_kindDestDir',
+  // #4746 (zoo runtime): resolves the Zoo Code custom-modes target file
+  // (globalStorage custom_modes.yaml / project .roomodes).
+  'resolveZooModesPath',
 ];
 
 describe('portability-vocab drift guard', () => {
