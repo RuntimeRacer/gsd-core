@@ -6976,11 +6976,15 @@ function mergeZooCustomModes(existingContent, newEntries) {
 function resolveZooModesPath(targetDir, isGlobal, opts = {}) {
   const env = opts.env || process.env;
   const home = opts.home || os.homedir();
+  // #4746 testability seam: `opts.platform` (defaults to process.platform) lets
+  // hermetic unit tests exercise the darwin/linux branch shapes on any host —
+  // the production path is unchanged because no caller passes the key.
+  const platform = opts.platform || process.platform;
   if (isGlobal) {
     let vscodeUserDir;
-    if (process.platform === 'win32') {
+    if (platform === 'win32') {
       vscodeUserDir = path.join(env.APPDATA || path.join(home, 'AppData', 'Roaming'), 'Code', 'User');
-    } else if (process.platform === 'darwin') {
+    } else if (platform === 'darwin') {
       vscodeUserDir = path.join(home, 'Library', 'Application Support', 'Code', 'User');
     } else {
       vscodeUserDir = path.join(home, '.config', 'Code', 'User');
