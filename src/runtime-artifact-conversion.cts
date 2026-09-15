@@ -3145,12 +3145,12 @@ function convertClaudeCommandToKiloSkill(content, skillName) {
  * @param pathPrefix  trailing-slash path prefix for global `.claude` refs
  *                    (e.g. '/home/user/.roo/'); skipped when not a path
  * @param _runtime    unused — sibling-converter compatibility
- * @param cmdNames    unused — sibling-converter compatibility (the port source
+ * @param _cmdNames  unused — sibling-converter compatibility (the port source
  *                    uses a hardcoded `/gsd:([a-z][a-z0-9-]*)` regex, not the
  *                    command-roster)
  * @returns {string} converted command markdown
  */
-function convertClaudeCommandToZooCommand(content, pathPrefix, _runtime = null, cmdNames = null) {
+function convertClaudeCommandToZooCommand(content, pathPrefix, _runtime = null, _cmdNames = null) {
   // Step 1: parse + rebuild frontmatter (handles LF and CRLF sources; output LF).
   const fmMatch = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n/);
   if (fmMatch) {
