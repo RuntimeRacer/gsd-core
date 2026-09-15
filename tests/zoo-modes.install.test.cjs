@@ -474,7 +474,8 @@ describe('#4746 Zoo loader fidelity — emitted modes must survive Zoo\'s real l
       path.join(agentsSrc, 'gsd-executor.md'),
       '---\nname: gsd-executor\ndescription: Executes GSD plans\n---\n\nBody with an em-dash — and text.',
     );
-    // The regression shape: a .compact variant stem (dotted slug pre-fix).
+    // A .compact.md payload variant in the source tree — it must NOT become a
+    // mode (option A); it stays a file for the agent-skills seam.
     fs.writeFileSync(
       path.join(agentsSrc, 'gsd-advisor-researcher.compact.md'),
       '---\nname: gsd-advisor-researcher\ndescription: Compact advisor variant\n---\n\nCompact body.',
@@ -492,21 +493,22 @@ describe('#4746 Zoo loader fidelity — emitted modes must survive Zoo\'s real l
 
   afterEach(() => cleanup(root));
 
-  test('.compact dotted stems load as schema-conforming Zoo modes (regression: 29 dotted slugs discarded wholesale)', () => {
+  test('.compact variants are EXCLUDED from the modes surface — canonical agents only (option A; regression: 29 dotted slugs + inert same-named picker entries)', () => {
     const res = installZooModes(project, agentsSrc, false, { env: {}, home: root });
     assert.strictEqual(res.wrote, true);
-    assert.strictEqual(res.modeCount, 3);
+    // gsd-executor + gsd-curator become modes; the .compact.md payload variant
+    // does not (it stays a file in agentsSrc for the agent-skills seam).
+    assert.strictEqual(res.modeCount, 2);
 
     const raw = fs.readFileSync(path.join(project, '.roomodes'), 'utf8');
     const { modes, violations, parseError } = simulateZooLoad(raw);
     assert.strictEqual(parseError, '', `Zoo parse failed: ${parseError}`);
     assert.deepStrictEqual(violations, [], 'Zoo schema violations');
-    assert.strictEqual(modes.length, 3, 'all modes load');
-    assert.ok(
-      modes.some((m) => m.slug === 'gsd-advisor-researcher-compact'),
-      'dotted stem sanitized to dashed slug in emitted file',
-    );
+    assert.strictEqual(modes.length, 2, 'only canonical agents load as modes');
+    assert.ok(modes.some((m) => m.slug === 'gsd-executor'), 'canonical agent present');
+    assert.ok(!modes.some((m) => m.slug.endsWith('-compact')), 'no compact-variant mode');
     assert.ok(!modes.some((m) => m.slug.includes('.')), 'no dotted slugs survive');
+    assert.ok(!raw.includes('Compact advisor variant'), 'compact payload content not emitted as a mode');
   });
 
   test('curly quotes / NBSP in whenToUse survive Zoo\'s pre-parse cleaner with values intact', () => {
@@ -576,7 +578,7 @@ describe('#4746 Zoo loader fidelity — emitted modes must survive Zoo\'s real l
     const { modes, violations, parseError } = simulateZooLoad(merged);
     assert.strictEqual(parseError, '', `Zoo parse failed: ${parseError}`);
     assert.deepStrictEqual(violations, [], 'merged document fully schema-valid');
-    assert.strictEqual(modes.length, 4, 'user mode + 3 gsd modes');
+    assert.strictEqual(modes.length, 3, 'user mode + 2 canonical gsd modes (compact variants excluded)');
     const architect = modes.find((m) => m.slug === 'architect');
     assert.strictEqual(architect.name, '\u{1F3EF} Solutions Architect', 'emoji name intact');
     assert.deepStrictEqual(
@@ -587,26 +589,29 @@ describe('#4746 Zoo loader fidelity — emitted modes must survive Zoo\'s real l
   });
 
   test('slug sanitation collisions dedupe last-wins instead of emitting duplicate slugs Zoo would reject', () => {
+    // Two CANONICAL (non-.compact) stems that sanitize onto the same slug:
+    // space and underscore both fold to '-' (compact variants can no longer
+    // collide — they are excluded from the modes surface entirely).
     fs.writeFileSync(
-      path.join(agentsSrc, 'gsd-foo-compact.md'),
-      '---\ndescription: canonical sibling\n---\n\nCanonical body.',
+      path.join(agentsSrc, 'gsd-a b.md'),
+      '---\ndescription: spaced sibling\n---\n\nSpaced body.',
     );
     fs.writeFileSync(
-      path.join(agentsSrc, 'gsd-foo.compact.md'),
-      '---\ndescription: dotted sibling sanitizes onto the same slug\n---\n\nDotted body.',
+      path.join(agentsSrc, 'gsd-a_b.md'),
+      '---\ndescription: underscore sibling sanitizes onto the same slug\n---\n\nUnderscore body.',
     );
     const res = installZooModes(project, agentsSrc, false, { env: {}, home: root });
-    // gsd-executor, gsd-curator, gsd-advisor-researcher.compact, + two foo
-    // siblings collapsing to one slug.
-    assert.strictEqual(res.modeCount, 4, 'collision folds to one entry');
+    // gsd-executor + gsd-curator (compact variant excluded) + the two
+    // colliding siblings folding into one entry.
+    assert.strictEqual(res.modeCount, 3, 'collision folds to one entry');
 
     const raw = fs.readFileSync(path.join(project, '.roomodes'), 'utf8');
     const { modes, violations, parseError } = simulateZooLoad(raw);
     assert.strictEqual(parseError, '', `Zoo parse failed: ${parseError}`);
     assert.deepStrictEqual(violations, [], 'no duplicate-slug rejection');
-    const foo = modes.filter((m) => m.slug === 'gsd-foo-compact');
-    assert.strictEqual(foo.length, 1, 'single gsd-foo-compact entry (last wins)');
+    const folded = modes.filter((m) => m.slug === 'gsd-a-b');
+    assert.strictEqual(folded.length, 1, 'single gsd-a-b entry (last wins)');
     // Block scalars clip-chomp to one trailing \n — compare trimmed.
-    assert.strictEqual(foo[0].roleDefinition.trim(), 'Dotted body.', 'last entry wins');
+    assert.strictEqual(folded[0].roleDefinition.trim(), 'Underscore body.', 'last entry wins');
   });
 });

@@ -7046,7 +7046,19 @@ function installZooModes(targetDir, agentsSrc, isGlobal, opts = {}) {
   if (!agentsSrc || !fs.existsSync(agentsSrc)) {
     return { configPath: null, modeCount: 0, wrote: false };
   }
-  const agentFiles = fs.readdirSync(agentsSrc).filter((f) => f.startsWith('gsd-') && f.endsWith('.md'));
+  // Canonical agents ONLY (option A, #4746 follow-up): `.compact.md` variants
+  // are payload files behind the `gsd_run query agent-skills` seam
+  // (workflow.compact_content selects them in code, src/init.cts) — the corpus
+  // contains ZERO dispatch sites targeting a compact slug
+  // (`subagent_type="gsd-x"` is always canonical), so emitting them as modes
+  // only produced inert, identically-named picker entries. The compact FILES
+  // stay payload-only in the package's agents source; they are never part of
+  // any install surface on zoo (note: the agent-skills persona fallback
+  // currently finds no agents dir on zoo either — personas travel via the
+  // modes' roleDefinition; see the #4746 dispatch-dynamics follow-up).
+  const agentFiles = fs.readdirSync(agentsSrc).filter(
+    (f) => f.startsWith('gsd-') && f.endsWith('.md') && !f.endsWith('.compact.md'),
+  );
   if (agentFiles.length === 0) {
     return { configPath: null, modeCount: 0, wrote: false };
   }

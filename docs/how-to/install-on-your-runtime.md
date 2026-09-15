@@ -378,13 +378,13 @@ The flags `--roo`, `--roo-code`, `--roo-cline`, and `--zoo-code` are aliases of 
 
 GSD writes two surfaces:
 
-- **Custom modes** — every GSD agent becomes a Zoo custom mode (`gsd-executor`, `gsd-planner`, …) with its role definition, `whenToUse` guidance, and tool groups. Modes are entries inside one YAML file (Zoo's [`.roomodes` schema](https://github.com/Zoo-Code-Org/Zoo-Code/blob/main/schemas/roomodes.json)), merged without touching your own modes: a re-run replaces the `gsd-*` entries and leaves user entries byte-for-byte.
+- **Custom modes** — every canonical GSD agent becomes a Zoo custom mode (`gsd-executor`, `gsd-planner`, …) with its role definition, `whenToUse` guidance, and tool groups. `agents/*.compact.md` payload variants are deliberately **not** emitted as modes: nothing dispatches a compact slug (workflow payload selection happens in code through GSD's `agent-skills` seam when `workflow.compact_content` is enabled), and as modes they only produced inert, identically-named picker entries. Modes are entries inside one YAML file (Zoo's [`.roomodes` schema](https://github.com/Zoo-Code-Org/Zoo-Code/blob/main/schemas/roomodes.json)), merged without touching your own modes: a re-run replaces the `gsd-*` entries and leaves user entries byte-for-byte.
   - Global: `custom_modes.yaml` under Zoo's VS Code extension storage
     (`Code/User/globalStorage/zoocodeorganization.zoo-code/settings/` in your VS Code user dir).
   - Local: `.roomodes` at the project root.
 - **Slash commands** — flat `.md` files: `~/.roo/commands/gsd-*.md` (global) or `.roo/commands/gsd-*.md` (local). They appear as `/gsd-help`, `/gsd-new-project`, `/gsd-plan-phase`, etc. after a window reload.
 
-Subagent dispatch uses Zoo's `new_task` tool with the target mode's slug (e.g. `gsd-executor`); the parent task pauses and resumes when the subtask finishes. There is no hooks surface on Zoo today — nothing is written to any `settings.json`.
+GSD workflows run **inline** on Zoo (flattened dispatch, like Cline): the orchestrator absorbs each agent's persona from GSD's agent-skills payload and does the work in its own context. Zoo's `new_task` subtask primitive pauses the parent and its subagent tool surface fails closed to read-only, so GSD does not orchestrate through it. The installed modes are still fully usable — you can switch Zoo into any `gsd-*` mode manually at any time. There is no hooks surface on Zoo today — nothing is written to any `settings.json`.
 
 **Override the install directory:**
 
