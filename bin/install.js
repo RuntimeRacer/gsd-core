@@ -3321,6 +3321,32 @@ function _callArgValueRe(key) {
 }
 
 /**
+ * Rename ONE call-argument KEY token inside a call span (`key` → `newKey`),
+ * preserving the value and the delimiter (the original `\s*[=:]\s*` spelling)
+ * verbatim. `match` is the result of `_callArgValueRe(key).exec(...)` against
+ * the same-length mask of `text` — its offsets line up 1:1 with `text`, and
+ * `match[1]` is the value group, so the key+delimiter region is
+ * `match[0].slice(0, -match[1].length)`.
+ *
+ * #4746 (option 2): unlike `_stripCallArgument` (removal) or `_projectRoleArgument`
+ * (structural role-group injection), this is the NAMED-DISPATCH rename: the target
+ * primitive resolves the named mode itself and its native parameter simply has a
+ * different name than the corpus's Claude-shaped spelling (Zoo's `new_task` takes
+ * `mode`/`message`, not `subagent_type`/`prompt`). Only the key token is replaced —
+ * the value and its quoting survive byte-for-byte.
+ */
+function _renameCallArgumentKey(text, match, key, newKey) {
+  const keyEnd = match.index + match[0].length - match[1].length;
+  const headLen = key.length;
+  return (
+    text.slice(0, match.index) +
+    newKey +
+    text.slice(match.index + headLen, keyEnd) +
+    text.slice(keyEnd)
+  );
+}
+
+/**
  * Returns the literal role name from a captured role-argument value EXPR
  * (e.g. `"gsd-planner"`) — or `null` when it is not a genuine static
  * literal: a bare dynamic expression (`ref.agent`), OR a quoted value that
@@ -3374,13 +3400,28 @@ function _normalizeDispatchCallSpan(spanText, hasBraceWrapper, dispatch, toolCon
   const canOrchestrate = dispatch.subagentToolkit === 'full'
     && (dispatch.maxDepth === -1 || (typeof dispatch.maxDepth === 'number' && dispatch.maxDepth > 1));
   const { toolName, backgroundParam, supportsPerCallModel, availableRoles, runtime } = toolConfig;
+  // #4746 (option 2): a named-dispatch target whose native role parameter has a
+  // DIFFERENT name than the corpus's Claude-shaped `subagent_type` (Zoo's
+  // `new_task` takes `mode`, not `subagent_type`). This is tool vocabulary the
+  // caller supplies (same as the parameter names themselves — there is no
+  // `dispatch` axis for them), and it must be EXPLICIT: a claude-style named
+  // target (native param IS `subagent_type`) and a structural target (hermes)
+  // must keep their existing pass-through / injection behavior byte-identical.
+  const renamesNamedArgs = namedDispatch && toolConfig.namedDispatchRenamesArgs === true;
 
   let text = spanText;
 
-  // 1. Named-role argument (subagent_type= / subagent_type:) — only when the
-  //    target has no native named-agent lookup (dispatch.namedDispatch).
-  //    Fail-closed validation runs on the extracted value REGARDLESS of
-  //    which source syntax produced it (#2284 requirement 2).
+  // 1. Named-role argument (subagent_type= / subagent_type:).
+  //    Structural path (!namedDispatch): only when the target has no native
+  //    named-agent lookup (dispatch.namedDispatch). Fail-closed validation runs
+  //    on the extracted value REGARDLESS of which source syntax produced it
+  //    (#2284 requirement 2).
+  //    Named-rename path: the target resolves the named mode itself (no
+  //    prompt-content embedding, no structural role — exactly like every
+  //    named-dispatch runtime), but the argument KEY must be renamed or the
+  //    emitted call is invalid for the primitive. The VALUE is preserved
+  //    verbatim and still fail-closed validated, so a `new_task(mode="gsd-x")`
+  //    referencing a role prompt that does not ship cannot silently install.
   if (!namedDispatch) {
     const roleRe = _callArgValueRe('subagent_type');
     const rm = roleRe.exec(_maskStringsAndComments(text));
@@ -3399,6 +3440,36 @@ function _normalizeDispatchCallSpan(spanText, hasBraceWrapper, dispatch, toolCon
         _assertRoleResolvable('', availableRoles, runtime, 'subagent_type');
       }
       text = _projectRoleArgument(text, rm.index, rm.index + rm[0].length, roleValueExpr, toolConfig, canOrchestrate);
+    }
+  } else if (renamesNamedArgs) {
+    const roleRe = _callArgValueRe('subagent_type');
+    const rm = roleRe.exec(_maskStringsAndComments(text));
+    if (rm) {
+      const roleValueExpr = text.slice(rm.index + rm[0].length - rm[1].length, rm.index + rm[0].length);
+      const literalRole = _literalRoleValue(roleValueExpr);
+      if (literalRole !== null) {
+        _assertRoleResolvable(literalRole, availableRoles, runtime, 'subagent_type');
+      } else if (!availableRoles) {
+        _assertRoleResolvable('', availableRoles, runtime, 'subagent_type');
+      }
+      text = _renameCallArgumentKey(text, rm, 'subagent_type', toolConfig.namedRoleParam);
+    }
+  }
+
+  // 1.5. Prompt-content argument (prompt= / prompt:) — the corpus's name for
+  //      the dispatched task's operating instructions. The structural path keeps
+  //      `prompt=` (hermes's delegate_task accepts it natively); on the
+  //      named-rename path the target's native parameter has a different name
+  //      (Zoo's `new_task` takes `message`), so the key is renamed and the value
+  //      preserved verbatim. Gated on the SAME explicit `namedDispatchRenamesArgs`
+  //      flag as the role rename — never inferred from field values, because
+  //      hermes's `gsd_role_prompt` (its structural embedding param) must not be
+  //      mistaken for a native prompt-arg name.
+  if (renamesNamedArgs && toolConfig.promptContentParam && toolConfig.promptContentParam !== 'prompt') {
+    const promptRe = _callArgValueRe('prompt');
+    const pm = promptRe.exec(_maskStringsAndComments(text));
+    if (pm) {
+      text = _renameCallArgumentKey(text, pm, 'prompt', toolConfig.promptContentParam);
     }
   }
 
@@ -3554,15 +3625,21 @@ function _maskQuotedRegionsWithinCallSpans(content, headWords) {
  * (unquoted, real call syntax) still fires while a same-text mention genuinely
  * inside a quoted string does not.
  *
- * The completeness checks also only apply when `namedDispatch` is false: when
- * `dispatch.namedDispatch === true`, `_normalizeDispatchCallSpan` step 1
- * INTENTIONALLY leaves `subagent_type` unprojected (the target primitive
- * resolves named agents itself) — a residual `subagent_type` in that case is
- * the correct, intended output, not a defect. (The call HEAD is still renamed
- * unconditionally regardless of `namedDispatch` — see step 4 there — so a
- * literal `Agent(` residual is gated the same way purely for symmetry with
- * the dispatch-facts-driven contract; it is never actually left unrenamed by
- * the projection in practice.)
+ * The completeness checks also only apply when `namedDispatch` is false — or
+ * when the named target renames the role parameter (#4746): when
+ * `dispatch.namedDispatch === true` AND the target's native role parameter IS
+ * the corpus spelling (`subagent_type`, i.e. a claude-style named target),
+ * `_normalizeDispatchCallSpan` step 1 INTENTIONALLY leaves `subagent_type`
+ * unprojected (the target primitive resolves named agents itself) — a residual
+ * `subagent_type` in that case is the correct, intended output, not a defect.
+ * When the named target RENAMES the role parameter (toolConfig
+ * `namedDispatchRenamesArgs` — Zoo's `new_task` takes `mode`, not
+ * `subagent_type`), a residual `subagent_type` IS a defect (the primitive has
+ * no such parameter) and the completeness checks run exactly as on the
+ * structural path. (The call HEAD is still renamed unconditionally regardless
+ * of `namedDispatch` — see step 4 there — so a literal `Agent(` residual is
+ * gated the same way purely for symmetry with the dispatch-facts-driven
+ * contract; it is never actually left unrenamed by the projection in practice.)
  *
  * The model-leak check is unaffected by either fix above — it is orthogonal
  * to `namedDispatch` (gated only by `supportsPerCallModel`) and already
@@ -3572,8 +3649,12 @@ function _maskQuotedRegionsWithinCallSpans(content, headWords) {
  */
 function _assertProjectionComplete(content, toolConfig, namedDispatch = false) {
   const { toolName, runtime, supportsPerCallModel } = toolConfig;
+  // #4746: the residual-form completeness checks fire on the structural path
+  // AND on the named-rename path (a `subagent_type` that survives into a
+  // `new_task(...)` call is a broken dispatch, not intended output).
+  const completenessGated = !namedDispatch || toolConfig.namedDispatchRenamesArgs === true;
 
-  if (!namedDispatch) {
+  if (completenessGated) {
     const quoteAware = _maskQuotedRegionsWithinCallSpans(content, [toolName, 'Agent']);
     if (/\bsubagent_type\s*[=:]/.test(quoteAware)) {
       throw new Error(
@@ -3715,8 +3796,11 @@ function projectNamedDispatchToStructuralDelegate(content, dispatch, toolConfig)
   //     example syntax, not a live call). Renamed for the same accuracy the
   //     real calls get; a literal quoted role value is still fail-closed
   //     validated even though there is no call structure to inject
-  //     role-prompt/fail-closed guidance INTO.
-  if (!namedDispatch) {
+  //     role-prompt/fail-closed guidance INTO. Also runs on the named-rename
+  //     path (#4746): zoo's `new_task` has no `subagent_type` parameter, so a
+  //     disconnected prose mention must be renamed to `mode` too, with the
+  //     same fail-closed literal-value validation.
+  if (!namedDispatch || toolConfig.namedDispatchRenamesArgs === true) {
     converted = converted.replace(
       /\bsubagent_type(\s*[=:]\s*"[^"]*")/g,
       (_m, rest) => {
@@ -3789,6 +3873,82 @@ function convertClaudeToHermesMarkdown(content, ctx) {
 }
 
 // ── End Hermes converters ────────────────────────────────────────────────────
+
+// ── Zoo Code converters (#4746 follow-up: native new_task dispatch) ─────────
+//
+// Zoo Code's dispatch primitive is `new_task(mode, message)` (docs:
+// https://docs.zoocode.dev/advanced-usage/available-tools/new-task): a subtask
+// launched in a named custom mode slug. The parent task PAUSES while the
+// subtask runs and resumes via `finishSubTask()`; there is no background/
+// parallel variant and no per-call model parameter. Prior to this follow-up the
+// staged workflow corpus shipped VERBATIM Claude dispatch syntax
+// (`Agent(prompt="...", subagent_type="gsd-x", model="{X_MODEL}")`) even though
+// Zoo has no Agent tool — the false "Agent tool IS available" assertion and
+// literal calls installed unnormalized.
+//
+// Zoo is a NAMED-dispatch host (`dispatch.namedDispatch: true` — `new_task`
+// resolves the `mode` slug itself), but its native parameter NAMES differ from
+// the corpus's Claude-shaped `subagent_type`/`prompt`. The generic #2284
+// machinery's named-dispatch branch passes `subagent_type` through verbatim
+// because claude-style named targets accept that spelling; Zoo does not, so the
+// tool config below declares `namedDispatchRenamesArgs: true` — an EXPLICIT
+// tool-vocabulary flag (same caller-supplied category as the parameter names
+// themselves, see the toolConfig doc on `projectNamedDispatchToStructuralDelegate`)
+// that turns the named path's pass-through into a key rename + fail-closed
+// role validation, and enables the post-projection completeness guard.
+const ZOO_DISPATCH_TOOL_CONFIG = Object.freeze({
+  toolName: 'new_task',
+  namedRoleParam: 'mode',
+  promptContentParam: 'message',
+  // structuralRoleParam / leafRoleValue / backgroundParam are INERT (null) on
+  // the zoo path by construction: `_projectRoleArgument` (the only consumer of
+  // structuralRoleParam/leafRoleValue) runs exclusively inside the
+  // !namedDispatch structural branch, and the background-flag rename is gated
+  // on `dispatch.background === true` — zoo declares `background: false`
+  // (new_task pauses the parent), so that branch is never entered. null is
+  // deliberate documentation that these values are unused here, not a silent
+  // omission; passing a nominal string would mislead a reader into thinking
+  // zoo has a structural role or a background parameter it does not have.
+  structuralRoleParam: null,
+  leafRoleValue: null,
+  backgroundParam: null,
+  supportsPerCallModel: false,
+  // #4746: explicit named-dispatch rename (see the section header above).
+  namedDispatchRenamesArgs: true,
+});
+
+/**
+ * Zoo `.md` content converter (#4746 follow-up): project staged Zoo
+ * workflow/command markdown from the host-neutral Claude-shaped `Agent(...)`
+ * corpus onto Zoo's real dispatch primitive `new_task(mode=..., message=...)`,
+ * via the SAME generic #2284 machinery hermes uses (driven entirely by
+ * `capabilities/zoo/capability.json`'s `hostIntegration.dispatch` facts + the
+ * caller-supplied tool vocabulary above).
+ *
+ * DELIBERATELY DISPATCH-ONLY — no brand swap, no path rewrites:
+ *   - Workflows (`gsd-core/` tree): copyWithPathReplacement already applied the
+ *     generic `~/.claude/`→pathPrefix block (zoo's dirName is `.roo`),
+ *     `_stampNonClaudeRuntimeDefaults`, and `normalizeAgentBodyForRuntime`
+ *     BEFORE this converter runs (see the dispatch.md call site ~L8293), and
+ *     the converter-table seam is NOT the single place hermes transformations
+ *     live either (hermes's commands→skills path goes through the layout
+ *     engine). So re-applying path/brand rewrites here would double-apply them.
+ *   - Commands (`.roo/commands/`): staged by the layout engine via the
+ *     descriptor's `converter: "convertClaudeCommandToZooCommand"` +
+ *     `_applyRuntimeRewrites`'s `case 'zoo':` seam (src/runtime-artifact-
+ *     conversion.cts) — a DIFFERENT seam, exactly as hermes's commands path is.
+ */
+function convertClaudeToZooWorkflowMarkdown(content, ctx) {
+  const runtime = (ctx && ctx.runtime) || 'zoo';
+  const dispatch = _hostIntegrationDispatch(runtime);
+  const toolConfig = Object.assign({}, ZOO_DISPATCH_TOOL_CONFIG, {
+    availableRoles: _resolveAvailableGsdRoles(),
+    runtime,
+  });
+  return projectNamedDispatchToStructuralDelegate(content, dispatch, toolConfig);
+}
+
+// ── End Zoo converters ───────────────────────────────────────────────────────
 
 function convertSlashCommandsToCodexSkillMentions(content) {
   // Colon-style /gsd: never appears as a filesystem path segment, so no boundary guard is needed (unlike the hyphen-style below).
@@ -7055,7 +7215,8 @@ function installZooModes(targetDir, agentsSrc, isGlobal, opts = {}) {
   // stay payload-only in the package's agents source; they are never part of
   // any install surface on zoo (note: the agent-skills persona fallback
   // currently finds no agents dir on zoo either — personas travel via the
-  // modes' roleDefinition; see the #4746 dispatch-dynamics follow-up).
+  // modes' roleDefinition; the #4746 dispatch-dynamics follow-up landed in the
+  // native `new_task` dispatch projection — see convertClaudeToZooWorkflowMarkdown).
   const agentFiles = fs.readdirSync(agentsSrc).filter(
     (f) => f.startsWith('gsd-') && f.endsWith('.md') && !f.endsWith('.compact.md'),
   );
@@ -8127,6 +8288,19 @@ const RUNTIME_CONTENT_DISPATCH = {
       }
       return content;
     },
+  },
+  // #4746 follow-up: Zoo's `new_task` dispatch projection. The gsd-core/
+  // workflows tree is emitted through this converter-table seam via
+  // copyWithPathReplacement (the same seam hermes uses) — see
+  // convertClaudeToZooWorkflowMarkdown above. Dispatch-only: path/brand
+  // rewrites for this tree are already applied by the generic block in
+  // copyWithPathReplacement, and the commands tree is staged by the layout
+  // engine's own seam (descriptor `converter` + `_applyRuntimeRewrites`'s
+  // `case 'zoo'`), so there is nothing for a `js` entry to do — no `.cjs`/
+  // `.js` file in the zoo surface needs this projection (mirrors hermes, which
+  // keeps its js entry for brandingRewrites zoo has no equivalent of).
+  zoo: {
+    md: (content, ctx) => convertClaudeToZooWorkflowMarkdown(content, ctx),
   },
 };
 
@@ -14638,6 +14812,9 @@ module.exports = {
     _hostIntegrationDispatch,
     _resolveAvailableGsdRoles,
     HERMES_DISPATCH_TOOL_CONFIG,
+    // #4746 follow-up — Zoo native new_task dispatch projection
+    convertClaudeToZooWorkflowMarkdown,
+    ZOO_DISPATCH_TOOL_CONFIG,
     maskStringLiterals,
     findDispatchCallSpans,
     _assertProjectionComplete,

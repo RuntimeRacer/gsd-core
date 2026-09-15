@@ -26,6 +26,7 @@ const {
   resolveZooModesPath,
   mergeZooCustomModes,
   stripGsdBlocksFromZooModes,
+  maskStringLiterals,
 } = require('../bin/install.js');
 
 const { runNode } = require('./helpers/process-seam.cjs');
@@ -321,6 +322,73 @@ describe('#4746 CLI smoke — spawned node bin/install.js --zoo', () => {
       const content = readFileNormalized(path.join(commandsDir, file));
       assert.ok(!content.includes('~/.claude/'), `${file} must not reference ~/.claude/`);
       assert.ok(!content.includes('$HOME/.claude/'), `${file} must not reference $HOME/.claude/`);
+    }
+  });
+
+  test('--zoo --local projects the installed workflow tree onto native new_task dispatch', (t) => {
+    // #4746 follow-up (option 2): the staged gsd-core/workflows corpus must be
+    // projected from the Claude-shaped Agent(...) form onto Zoo's real
+    // `new_task(mode=..., message=...)` primitive — no literal Agent( call
+    // syntax and no subagent_type token may survive, every real dispatch call
+    // must be new_task(, and every literal mode="gsd-*" value it names must be
+    // a mode slug present in the installed .roomodes (a workflow dispatching a
+    // mode that does not exist is a broken install, fail-closed by the #2284
+    // machinery at conversion time).
+    const root = createTempDir('gsd-zoo-cli-dispatch-');
+    t.after(() => cleanup(root));
+    gitOrThrow(['init'], { cwd: root });
+    const env = zooEnv(root);
+    const res = runZooCli(['--zoo', '--local'], root, env);
+    assert.strictEqual(res.exitCode, 0, `installer failed: ${res.stderr}`);
+
+    const workflowsDir = path.join(root, 'gsd-core', 'workflows');
+    assert.ok(fs.existsSync(workflowsDir), 'installed gsd-core/workflows tree must exist');
+
+    const mdFiles = [];
+    const walk = (dir) => {
+      for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, e.name);
+        if (e.isDirectory()) walk(full);
+        else if (e.name.endsWith('.md')) mdFiles.push(full);
+      }
+    };
+    walk(workflowsDir);
+    assert.ok(mdFiles.length > 0, 'expected installed workflow markdown files');
+
+    const dispatchedModes = new Set();
+    let sawNewTask = false;
+    for (const file of mdFiles) {
+      const content = fs.readFileSync(file, 'utf8');
+      const rel = path.relative(root, file).replace(/\\/g, '/');
+      // String-mask so a quoted prose mention (e.g. a description that merely
+      // DOCUMENTS the old Claude syntax) is not mistaken for live call syntax —
+      // the same quote-awareness the #2284 post-projection guard uses.
+      const mask = maskStringLiterals(content);
+      assert.ok(!/\bAgent\(/.test(mask), `${rel}: literal Agent( survived the projection`);
+      // Call-syntax residual check, matching the #2284 post-projection guard's
+      // own invariant: a BARE-WORD `subagent_type` prose mention (e.g.
+      // per-plan-executor-routing.md's "the process-spawn backend has no
+      // subagent_type") documents the concept and is deliberately left intact —
+      // only `subagent_type=`/`subagent_type:` dispatch syntax must be gone.
+      assert.ok(!/\bsubagent_type\s*[=:]/.test(mask), `${rel}: subagent_type= dispatch syntax survived the projection`);
+      if (/new_task\(/.test(content)) sawNewTask = true;
+      for (const m of content.matchAll(/\bmode\s*[=:]\s*"([^"]{1,200})"/g)) {
+        // Only literal, concrete gsd-* mode slugs — dynamic expressions
+        // (ref.agent) and template placeholders ("gsd-{agent}") resolve at
+        // runtime and are not installable-mode references.
+        if (m[1].startsWith('gsd-') && !/[{}]/.test(m[1])) dispatchedModes.add(m[1]);
+      }
+    }
+    assert.ok(sawNewTask, 'at least one installed workflow must contain a new_task( dispatch call');
+
+    const modesYaml = readFileNormalized(path.join(root, '.roomodes'));
+    const slugs = new Set([...modesYaml.matchAll(/^\s*- slug:\s*(\S+)/gm)].map((m) => m[1]));
+    assert.ok(slugs.size > 0, 'expected gsd-* mode slugs in .roomodes');
+    for (const mode of dispatchedModes) {
+      assert.ok(
+        slugs.has(mode),
+        `workflow dispatches mode="${mode}" but the installed .roomodes has no such slug`,
+      );
     }
   });
 

@@ -353,10 +353,14 @@ describe('ADR-1239 Phase A: hostIntegration descriptors', () => {
     trae:        true,
     windsurf:    true,
     zcode:       true,
-    // #4746: Zoo's new_task PAUSES the parent (background:false) and its
-    // subagentToolkit is 'read-only' with an undocumented depth budget — it
-    // cannot host the nested plan-checker/executor/verifier pipeline →
-    // force-flattened, mirroring the kimi-code (#2454/#2939) precedent.
+    // #4746: Zoo now has NATIVE dispatch — `new_task(mode, message)` projects
+    // the Agent(...) corpus (see convertClaudeToZooWorkflowMarkdown), and its
+    // subagentToolkit is 'full' (subtasks inherit the mode's read/edit/command/
+    // mcp groups). It is STILL force-flattened because `shouldFlattenDispatch`
+    // keys on BACKGROUND eligibility, and `new_task` is not a background
+    // primitive: it PAUSES the parent (dispatch.background/backgroundDispatch
+    // both false, documentation-sourced). "Flatten" here means "cannot be
+    // backgrounded", not "does not dispatch" — zoo dispatches, sequentially.
     zoo:         true,
     // #2103: vscode's dispatch.backgroundDispatch is 'undocumented' (no
     // documented background-subagent primitive) → fails closed to false →

@@ -4252,7 +4252,7 @@ const capabilities = {
           "nested": true,
           "maxDepth": "undocumented",
           "background": false,
-          "subagentToolkit": "read-only",
+          "subagentToolkit": "full",
           "backgroundDispatch": false,
           "isolation": "undocumented",
           "maxConcurrency": "undocumented"
@@ -8034,7 +8034,7 @@ const runtimes = {
           "nested": true,
           "maxDepth": "undocumented",
           "background": false,
-          "subagentToolkit": "read-only",
+          "subagentToolkit": "full",
           "backgroundDispatch": false,
           "isolation": "undocumented",
           "maxConcurrency": "undocumented"

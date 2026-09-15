@@ -384,7 +384,7 @@ GSD writes two surfaces:
   - Local: `.roomodes` at the project root.
 - **Slash commands** — flat `.md` files: `~/.roo/commands/gsd-*.md` (global) or `.roo/commands/gsd-*.md` (local). They appear as `/gsd-help`, `/gsd-new-project`, `/gsd-plan-phase`, etc. after a window reload.
 
-GSD workflows run **inline** on Zoo (flattened dispatch, like Cline): the orchestrator absorbs each agent's persona from GSD's agent-skills payload and does the work in its own context. Zoo's `new_task` subtask primitive pauses the parent and its subagent tool surface fails closed to read-only, so GSD does not orchestrate through it. The installed modes are still fully usable — you can switch Zoo into any `gsd-*` mode manually at any time. There is no hooks surface on Zoo today — nothing is written to any `settings.json`.
+GSD dispatches agents through Zoo's native `new_task` primitive: the installed workflows are projected at install time from GSD's host-neutral `Agent(...)` form onto `new_task(mode="gsd-x", message=...)`, launching each agent in its `gsd-*` custom mode. Zoo pauses the parent task for the duration of every subtask (there is no background/parallel variant), so GSD's parallel research "waves" run sequentially on Zoo — each subtask finishes and hands its summary back before the next begins. There is no per-call model selection: the dispatched mode's configured model applies. The installed modes remain fully usable on their own — you can switch Zoo into any `gsd-*` mode manually at any time. There is no hooks surface on Zoo today — nothing is written to any `settings.json`.
 
 **Override the install directory:**
 
