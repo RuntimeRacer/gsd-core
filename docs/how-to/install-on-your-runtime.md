@@ -362,6 +362,46 @@ directory is created for local scope.
 
 ---
 
+### Zoo Code
+
+Zoo Code is the community continuation of Roo Code (the VS Code extension, archived May 2026). GSD integrates through Zoo's custom-modes system and flat slash commands — Zoo still reads `.roo` paths, so the install surface is identical to the Roo-era layout.
+
+```bash
+# Global install (all projects)
+npx @opengsd/gsd-core@latest --zoo --global
+
+# Local install (this project only)
+npx @opengsd/gsd-core@latest --zoo --local
+```
+
+The flags `--roo`, `--roo-code`, `--roo-cline`, and `--zoo-code` are aliases of `--zoo` — they select the same runtime.
+
+GSD writes two surfaces:
+
+- **Custom modes** — every GSD agent becomes a Zoo custom mode (`gsd-executor`, `gsd-planner`, …) with its role definition, `whenToUse` guidance, and tool groups. Modes are entries inside one YAML file (Zoo's [`.roomodes` schema](https://github.com/Zoo-Code-Org/Zoo-Code/blob/main/schemas/roomodes.json)), merged without touching your own modes: a re-run replaces the `gsd-*` entries and leaves user entries byte-for-byte.
+  - Global: `custom_modes.yaml` under Zoo's VS Code extension storage
+    (`Code/User/globalStorage/zoocodeorganization.zoo-code/settings/` in your VS Code user dir).
+  - Local: `.roomodes` at the project root.
+- **Slash commands** — flat `.md` files: `~/.roo/commands/gsd-*.md` (global) or `.roo/commands/gsd-*.md` (local). They appear as `/gsd-help`, `/gsd-new-project`, `/gsd-plan-phase`, etc. after a window reload.
+
+Subagent dispatch uses Zoo's `new_task` tool with the target mode's slug (e.g. `gsd-executor`); the parent task pauses and resumes when the subtask finishes. There is no hooks surface on Zoo today — nothing is written to any `settings.json`.
+
+**Override the install directory:**
+
+```bash
+npx @opengsd/gsd-core@latest --zoo --global --config-dir /custom/path
+```
+
+Env-var precedence for the global config home is `--config-dir` > `ZOO_CONFIG_DIR` > `ROO_CONFIG_DIR` > `~/.roo`. These env vars are a GSD installer convention (Zoo itself does not read them); they relocate the commands dir, not the global modes file (which always lives in Zoo's globalStorage so Zoo finds it).
+
+**Uninstall** removes exactly the GSD surface — `gsd-*` mode entries are stripped from the modes files (a file left with only the `customModes:` header is deleted), and `gsd-*.md` commands are removed. Your own modes and commands are untouched.
+
+> **Migrating from the retired `harmony-ai-solutions/gsd-roo-code` fork?** Uninstall the old surface first (`npx get-shit-done-cc --roo --uninstall`, or manually strip `gsd-*` blocks from `.roomodes` / the old `custom_modes.yaml` and delete old `.roo/commands/gsd-*.md`) — the old fork wrote the same `gsd-*` slugs from a different package identity, and GSD's update flow only manages artifacts it installed itself.
+
+> Limitations: no hooks surface on Zoo (MVP), and the global modes file is only auto-located for standard VS Code (`Code/User` user-data dir) — VSCodium/Cursor-style hosts need a local install or a manual copy of the modes file.
+
+---
+
 ### CodeBuddy
 
 ```bash

@@ -209,5 +209,6 @@ module.exports = {
   "tests/workstream.test.cjs",
   "tests/worktree-safety.test.cjs",
   "tests/worktree.test.cjs",
+  "tests/zoo-config.test.cjs",
   ],
 };
