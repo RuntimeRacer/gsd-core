@@ -223,6 +223,36 @@ describe('#4746 convertClaudeAgentToZooModeEntry mode-entry conversion', () => {
     assert.strictEqual(entry.name, 'Executor', 'stem-derived display name fallback');
   });
 
+  // Zoo's roomodes schema pins slug to /^[a-zA-Z0-9-]+$/ (Dq zod regex in the
+  // shipped bundle): ONE non-conforming slug fails safeParse for the WHOLE
+  // customModes document and Zoo silently falls back to default modes — the
+  // global-install regression #4746 follow-up (29 dotted .compact slugs).
+  test('.compact variant stems sanitize to schema-conforming dashed slugs', () => {
+    const agent = '---\nname: gsd-advisor-researcher.compact\ndescription: d\n---\n\nBody.';
+    const entry = convertClaudeAgentToZooModeEntry(
+      agent,
+      { pathPrefix: './.roo/' },
+      { agentName: 'gsd-advisor-researcher.compact' },
+    );
+    assert.strictEqual(entry.slug, 'gsd-advisor-researcher-compact', 'dot folded to dash');
+    assert.match(entry.slug, /^[a-zA-Z0-9-]+$/, 'Zoo slug schema regex');
+  });
+
+  test('slug sanitation collapses any invalid run and trims edges', () => {
+    const mk = (stem) => convertClaudeAgentToZooModeEntry(
+      '---\ndescription: d\n---\n\nBody.',
+      { pathPrefix: './.roo/' },
+      { agentName: stem },
+    );
+    assert.strictEqual(mk('gsd-foo_bar.baz').slug, 'gsd-foo-bar-baz', 'underscore + dot runs fold');
+    assert.strictEqual(mk('gsd--a---b..c').slug, 'gsd-a-b-c', 'repeated separators collapse');
+    assert.strictEqual(mk('gsd-...').slug, 'gsd-agent', 'all-invalid stem falls back');
+    assert.strictEqual(mk('gsd-a.b/..cd').slug, 'gsd-a-b-cd', 'path-ish stem stays one token');
+    for (const stem of ['gsd-foo_bar.baz', 'gsd--a---b..c', 'gsd-a.b/..cd']) {
+      assert.match(mk(stem).slug, /^[a-zA-Z0-9-]+$/, `sanitized slug conforms for ${stem}`);
+    }
+  });
+
   test('CRLF agent body normalized to LF in roleDefinition', () => {
     const agent = '---\r\nname: gsd-executor\r\ndescription: d\r\n---\r\n\r\n- Read ~/.claude/a\r\n';
     const entry = convertClaudeAgentToZooModeEntry(

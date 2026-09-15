@@ -371,3 +371,242 @@ describe('#4746 CLI smoke — spawned node bin/install.js --zoo', () => {
     }
   });
 });
+
+// ─── Zoo loader fidelity (#4746 follow-up) ─────────────────────────────────────
+//
+// Reproduces Zoo's ACTUAL mode-loading pipeline from the shipped bundle
+// (zoocodeorganization.zoo-code-3.82.1, CustomModesManager):
+//   1. strip a leading BOM
+//   2. cleanInvisibleCharacters() over the RAW text BEFORE parsing:
+//      U+00A0→space, U+200B-200D deleted, U+2018/2019→', U+201C/201D→",
+//      U+2010-2015 + U+2212→'-'
+//   3. YAML parse (any error ⇒ whole document discarded)
+//   4. zod schema over the WHOLE {customModes:[...]} document — ONE violating
+//      mode fails safeParse and Zoo returns [] (falls back to default modes):
+//      slug /^[a-zA-Z0-9-]+$/, name min 1, roleDefinition min 1,
+//      whenToUse/description/customInstructions optional strings, groups ⊆
+//      [read,edit,command,mcp,modes] (or [group, {fileRegex, description}]
+//      tuples) with no duplicate group keys, source ∈ {global, project},
+//      no duplicate slugs (document-level refine).
+// This suite exists because the real-world global install shipped 29 dotted
+// `.compact` slugs that Zoo's schema silently discarded wholesale.
+const ZOO_SLUG_RE = /^[a-zA-Z0-9-]+$/;
+const ZOO_GROUP_ENUM = new Set(['read', 'edit', 'command', 'mcp', 'modes']);
+// Built from char codes (not a literal class): the U+200B-200D members make
+// eslint's no-misleading-character-class reject a regex literal character
+// class, and semantically we want exactly these code points regardless of how
+// an editor/font renders them.
+const ZOO_PROBLEMATIC = new RegExp(
+  '[' + [0x00a0, 0x200b, 0x200c, 0x200d, 0x2010, 0x2011, 0x2012, 0x2013, 0x2014, 0x2015, 0x2212, 0x2018, 0x2019, 0x201c, 0x201d]
+    .map((c) => String.fromCharCode(c)).join('') + ']',
+  'g',
+);
+
+function zooCleanInvisible(text) {
+  return text.replace(ZOO_PROBLEMATIC, (r) => {
+    switch (r) {
+      case '\u00A0': return ' ';
+      case '\u200B': case '\u200C': case '\u200D': return '';
+      case '\u2018': case '\u2019': return "'";
+      case '\u201C': case '\u201D': return '"';
+      default: return '-';
+    }
+  });
+}
+
+/** Parse + schema-validate exactly like Zoo's CustomModesManager. Returns
+ *  `{ modes, violations, parseError }` — Zoo loads `modes` only when both
+ *  `violations` and `parseError` are empty. */
+function simulateZooLoad(rawText) {
+  const yaml = require('js-yaml');
+  const text = rawText.charCodeAt(0) === 0xfeff ? rawText.slice(1) : rawText;
+  let doc;
+  try {
+    doc = yaml.load(zooCleanInvisible(text));
+  } catch (e) {
+    return { modes: [], violations: [], parseError: e.message };
+  }
+  if (!doc || typeof doc !== 'object' || !Array.isArray(doc.customModes)) {
+    return { modes: [], violations: ['document: customModes array missing'], parseError: '' };
+  }
+  const violations = [];
+  const seenSlugs = new Set();
+  for (const m of doc.customModes) {
+    const where = `mode ${(m && m.slug) || '<no slug>'}`;
+    if (typeof m.slug !== 'string' || !ZOO_SLUG_RE.test(m.slug)) violations.push(`${where}: slug fails /^[a-zA-Z0-9-]+$/`);
+    if (seenSlugs.has(m.slug)) violations.push(`${where}: duplicate slug`);
+    seenSlugs.add(m.slug);
+    if (typeof m.name !== 'string' || m.name.length < 1) violations.push(`${where}: name min 1`);
+    if (typeof m.roleDefinition !== 'string' || m.roleDefinition.length < 1) violations.push(`${where}: roleDefinition min 1`);
+    if (m.source !== undefined && !['global', 'project'].includes(m.source)) violations.push(`${where}: source enum`);
+    if (m.groups !== undefined) {
+      if (!Array.isArray(m.groups)) violations.push(`${where}: groups not an array`);
+      else {
+        const seenGroups = new Set();
+        for (const g of m.groups) {
+          const key = Array.isArray(g) ? g[0] : g;
+          if (seenGroups.has(key)) violations.push(`${where}: duplicate group ${key}`);
+          seenGroups.add(key);
+          if (typeof g === 'string') {
+            if (!ZOO_GROUP_ENUM.has(g)) violations.push(`${where}: group '${g}' not in Zoo enum`);
+          } else if (Array.isArray(g) && g.length === 2 && typeof g[0] === 'string' && ZOO_GROUP_ENUM.has(g[0]) && g[1] && typeof g[1] === 'object') {
+            // [group, {fileRegex, description}] tuple — valid
+          } else {
+            violations.push(`${where}: malformed group entry ${JSON.stringify(g)}`);
+          }
+        }
+      }
+    }
+  }
+  return { modes: doc.customModes, violations, parseError: '' };
+}
+
+describe('#4746 Zoo loader fidelity — emitted modes must survive Zoo\'s real load pipeline', () => {
+  let root;
+  let agentsSrc;
+  let project;
+
+  beforeEach(() => {
+    root = createTempDir('gsd-zoo-fidelity-');
+    agentsSrc = path.join(root, 'agents');
+    fs.mkdirSync(agentsSrc, { recursive: true });
+    fs.writeFileSync(
+      path.join(agentsSrc, 'gsd-executor.md'),
+      '---\nname: gsd-executor\ndescription: Executes GSD plans\n---\n\nBody with an em-dash — and text.',
+    );
+    // The regression shape: a .compact variant stem (dotted slug pre-fix).
+    fs.writeFileSync(
+      path.join(agentsSrc, 'gsd-advisor-researcher.compact.md'),
+      '---\nname: gsd-advisor-researcher\ndescription: Compact advisor variant\n---\n\nCompact body.',
+    );
+    // Curly quotes + colon force the quoted branch AND Zoo's pre-parse cleaner.
+    // The NBSP sits in `name` (frontmatter name passes through un-normalized,
+    // unlike the toSingleLine'd description, where JS \s would collapse it).
+    fs.writeFileSync(
+      path.join(agentsSrc, 'gsd-curator.md'),
+      '---\nname: gsd\u00A0curator\ndescription: Curates \u201Csmart\u201D quotes\u00A0and: colons\n---\n\nCurator body.',
+    );
+    project = path.join(root, 'project');
+    fs.mkdirSync(project);
+  });
+
+  afterEach(() => cleanup(root));
+
+  test('.compact dotted stems load as schema-conforming Zoo modes (regression: 29 dotted slugs discarded wholesale)', () => {
+    const res = installZooModes(project, agentsSrc, false, { env: {}, home: root });
+    assert.strictEqual(res.wrote, true);
+    assert.strictEqual(res.modeCount, 3);
+
+    const raw = fs.readFileSync(path.join(project, '.roomodes'), 'utf8');
+    const { modes, violations, parseError } = simulateZooLoad(raw);
+    assert.strictEqual(parseError, '', `Zoo parse failed: ${parseError}`);
+    assert.deepStrictEqual(violations, [], 'Zoo schema violations');
+    assert.strictEqual(modes.length, 3, 'all modes load');
+    assert.ok(
+      modes.some((m) => m.slug === 'gsd-advisor-researcher-compact'),
+      'dotted stem sanitized to dashed slug in emitted file',
+    );
+    assert.ok(!modes.some((m) => m.slug.includes('.')), 'no dotted slugs survive');
+  });
+
+  test('curly quotes / NBSP in whenToUse survive Zoo\'s pre-parse cleaner with values intact', () => {
+    installZooModes(project, agentsSrc, false, { env: {}, home: root });
+    const raw = readFileNormalized(path.join(project, '.roomodes'));
+    // The syntax-killer class — curly quotes — must never appear raw in a
+    // QUOTED scalar line: Zoo's cleaner would turn them into unescaped ASCII
+    // quotes inside our double-quoted string. (Raw dashes/NBSP inside
+    // roleDefinition block bodies are content-safe and stay literal.)
+    const quotedScalarLines = raw.split('\n').filter((l) => /: "/.test(l));
+    for (const line of quotedScalarLines) {
+      assert.ok(!/[\u2018\u2019\u201C\u201D]/.test(line), `raw curly quote in quoted scalar: ${line}`);
+    }
+
+    const { modes, violations, parseError } = simulateZooLoad(raw);
+    assert.strictEqual(parseError, '', `Zoo parse failed: ${parseError}`);
+    assert.deepStrictEqual(violations, [], 'Zoo schema violations');
+    const curator = modes.find((m) => m.slug === 'gsd-curator');
+    assert.ok(curator, 'curator mode present');
+    assert.strictEqual(curator.name, 'gsd\u00A0curator', 'NBSP in name round-trips through the \\u00a0 escape');
+    assert.strictEqual(
+      curator.whenToUse,
+      // toSingleLine collapses the NBSP (JS \s matches U+00A0) before emission;
+      // the curly quotes survive verbatim via the \uXXXX escapes.
+      'Curates \u201Csmart\u201D quotes and: colons',
+      'escaped scalar decodes to the original value (NBSP normalized by toSingleLine)',
+    );
+  });
+
+  test('global merge keeps a native Zoo-written user mode (nested groups, block customInstructions, emoji name) loadable', () => {
+    // Shape lifted from a real Zoo-written custom_modes.yaml (v3.82): emoji
+    // name, |- customInstructions, nested `groups: - - edit` fileRegex tuple.
+    const nativeUserMode = [
+      'customModes:',
+      '  - slug: architect',
+      '    name: \u{1F3EF} Solutions Architect',
+      '    roleDefinition: You are Zoo, an experienced technical leader.',
+      '    whenToUse: Use this mode to plan before implementation.',
+      '    customInstructions: |-',
+      '      1. Gather context.',
+      '',
+      '      2. Ask clarifying questions.',
+      '    groups:',
+      '      - read',
+      '      - command',
+      '      - mcp',
+      '      - - edit',
+      '        - fileRegex: \\.(md|toon)$',
+      '          description: Markdown / TOON files only',
+      '    source: global',
+    ].join('\n') + '\n';
+
+    const globalDir = path.join(root, 'roo-home');
+    fs.mkdirSync(globalDir, { recursive: true });
+    const modesPath = resolveZooModesPath(globalDir, true, { env: { APPDATA: path.join(root, 'appdata') }, home: root });
+    fs.mkdirSync(path.dirname(modesPath), { recursive: true });
+    fs.writeFileSync(modesPath, nativeUserMode);
+
+    const res = installZooModes(globalDir, agentsSrc, true, { env: { APPDATA: path.join(root, 'appdata') }, home: root });
+    assert.strictEqual(res.wrote, true);
+
+    const merged = fs.readFileSync(modesPath, 'utf8');
+    assert.ok(merged.includes('  - slug: architect'), 'native user mode block kept');
+    assert.ok(merged.includes('- - edit'), 'nested group tuple preserved verbatim');
+    assert.ok(!merged.includes('~/.claude'), 'no path leftovers');
+
+    const { modes, violations, parseError } = simulateZooLoad(merged);
+    assert.strictEqual(parseError, '', `Zoo parse failed: ${parseError}`);
+    assert.deepStrictEqual(violations, [], 'merged document fully schema-valid');
+    assert.strictEqual(modes.length, 4, 'user mode + 3 gsd modes');
+    const architect = modes.find((m) => m.slug === 'architect');
+    assert.strictEqual(architect.name, '\u{1F3EF} Solutions Architect', 'emoji name intact');
+    assert.deepStrictEqual(
+      architect.groups[3],
+      ['edit', { fileRegex: '\\.(md|toon)$', description: 'Markdown / TOON files only' }],
+      'nested group tuple parses to Zoo\'s [group, {fileRegex}] shape',
+    );
+  });
+
+  test('slug sanitation collisions dedupe last-wins instead of emitting duplicate slugs Zoo would reject', () => {
+    fs.writeFileSync(
+      path.join(agentsSrc, 'gsd-foo-compact.md'),
+      '---\ndescription: canonical sibling\n---\n\nCanonical body.',
+    );
+    fs.writeFileSync(
+      path.join(agentsSrc, 'gsd-foo.compact.md'),
+      '---\ndescription: dotted sibling sanitizes onto the same slug\n---\n\nDotted body.',
+    );
+    const res = installZooModes(project, agentsSrc, false, { env: {}, home: root });
+    // gsd-executor, gsd-curator, gsd-advisor-researcher.compact, + two foo
+    // siblings collapsing to one slug.
+    assert.strictEqual(res.modeCount, 4, 'collision folds to one entry');
+
+    const raw = fs.readFileSync(path.join(project, '.roomodes'), 'utf8');
+    const { modes, violations, parseError } = simulateZooLoad(raw);
+    assert.strictEqual(parseError, '', `Zoo parse failed: ${parseError}`);
+    assert.deepStrictEqual(violations, [], 'no duplicate-slug rejection');
+    const foo = modes.filter((m) => m.slug === 'gsd-foo-compact');
+    assert.strictEqual(foo.length, 1, 'single gsd-foo-compact entry (last wins)');
+    // Block scalars clip-chomp to one trailing \n — compare trimmed.
+    assert.strictEqual(foo[0].roleDefinition.trim(), 'Dotted body.', 'last entry wins');
+  });
+});

@@ -6885,6 +6885,21 @@ function writeClineArtifacts(targetDir, isGlobalInstall) {
 // (zoocodeorganization.zoo-code) is written, always creating directories
 // recursively.
 
+// Zoo's CustomModesManager runs cleanInvisibleCharacters() over the RAW file
+// text BEFORE parsing (shipped bundle, #4746): U+00A0→space, U+200B-200D are
+// deleted, U+2018/2019→', U+201C/201D→", and the U+2010-2015/U+2212 dash
+// family→'-'. A raw curly quote inside a double-quoted YAML scalar therefore
+// becomes an unescaped ASCII quote and kills the whole parse. Strings
+// containing any of these chars are force-quoted and the chars are emitted as
+// \uXXXX escapes (which survive the cleaner untouched and decode to the
+// original values).
+//
+// Two regexes on purpose: the flagless one for .test() (a /g regex would be
+// stateful across calls), the /g one for .replace() — without /g only the
+// FIRST problematic char in a string would be escaped.
+const ZOO_PROBLEMATIC_CHARS = /[\u00A0\u200B\u200C\u200D\u2010\u2011\u2012\u2013\u2014\u2015\u2212\u2018\u2019\u201C\u201D]/;
+const ZOO_PROBLEMATIC_CHARS_GLOBAL = /[\u00A0\u200B\u200C\u200D\u2010\u2011\u2012\u2013\u2014\u2015\u2212\u2018\u2019\u201C\u201D]/g;
+
 /**
  * #4746 — Serialize a scalar to YAML, quoting only when needed. Port of the
  * retired fork's yamlScalar (byte-for-byte regex/escape semantics).
@@ -6899,10 +6914,19 @@ function zooYamlScalar(s) {
     // treats every ` as a template-literal delimiter), which then mis-parses
     // downstream code as live text. Same character class, no literal delimiter.
     /[:#\[\]{},|>&*!'"\\%@\u0060]/.test(str) ||
+    ZOO_PROBLEMATIC_CHARS.test(str) ||
     /^\s|\s$/.test(str) ||
     /^(true|false|null|yes|no|on|off)$/i.test(str)
   ) {
-    return '"' + str.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n') + '"';
+    return (
+      '"' +
+      str
+        .replace(/\\/g, '\\\\')
+        .replace(/"/g, '\\"')
+        .replace(/\n/g, '\\n')
+        .replace(ZOO_PROBLEMATIC_CHARS_GLOBAL, (ch) => '\\u' + ch.charCodeAt(0).toString(16).padStart(4, '0')) +
+      '"'
+    );
   }
   return str;
 }
@@ -7048,17 +7072,25 @@ function installZooModes(targetDir, agentsSrc, isGlobal, opts = {}) {
     modesEntries.push(entry);
   }
 
+  // Zoo's schema rejects duplicate slugs for the WHOLE document (ptt.refine in
+  // the shipped bundle), and slug sanitation (dots→dashes) can fold two source
+  // stems into one slug — keep the LAST entry per slug, the same last-wins
+  // semantics as Zoo's own mode installer (filter + push).
+  const uniqueBySlug = new Map();
+  for (const entry of modesEntries) uniqueBySlug.set(entry.slug, entry);
+  const uniqueEntries = [...uniqueBySlug.values()];
+
   fs.mkdirSync(path.dirname(configPath), { recursive: true });
 
   if (fs.existsSync(configPath)) {
     const existing = fs.readFileSync(configPath, 'utf8');
-    const merged = mergeZooCustomModes(existing, modesEntries);
+    const merged = mergeZooCustomModes(existing, uniqueEntries);
     fs.writeFileSync(configPath, merged);
     const display = isGlobal ? configPath.replace(os.homedir(), '~') : `.roomodes`;
     console.log(`  ${green}✓${reset} Merged GSD modes into ${cyan}${display}${reset}`);
   } else {
     const freshYamlLines = ['customModes:'];
-    for (const mode of modesEntries) {
+    for (const mode of uniqueEntries) {
       freshYamlLines.push(...zooModeToYamlLines(mode));
     }
     fs.writeFileSync(configPath, freshYamlLines.join('\n') + '\n');
@@ -7066,7 +7098,7 @@ function installZooModes(targetDir, agentsSrc, isGlobal, opts = {}) {
     console.log(`  ${green}✓${reset} Wrote Zoo modes to ${cyan}${display}${reset}`);
   }
 
-  return { configPath, modeCount: modesEntries.length, wrote: true };
+  return { configPath, modeCount: uniqueEntries.length, wrote: true };
 }
 
 /**

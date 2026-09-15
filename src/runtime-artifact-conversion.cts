@@ -2826,11 +2826,27 @@ function convertClaudeAgentToZcodeAgent(content) {
  * `deriveAgentName` already returns the gsd- prefixed stem for shipped agents
  * ('gsd-executor.md' → 'gsd-executor'), so the slug is the stem itself; a bare
  * (non-gsd-) stem is re-prefixed to keep the GSD namespace.
+ *
+ * The slug is then coerced to Zoo's roomodes schema contract
+ * `/^[a-zA-Z0-9-]+$/` (the `Dq` zod slug regex in Zoo's shipped bundle): one
+ * non-conforming slug fails safeParse for the WHOLE customModes document and
+ * Zoo silently discards every mode (falls back to defaults). This bites for
+ * `.compact` agent variants — 'gsd-advisor-researcher.compact' →
+ * 'gsd-advisor-researcher-compact'. Runs of invalid chars collapse to a single
+ * '-', leading/trailing '-' are trimmed, and an all-invalid stem falls back to
+ * the generic 'gsd-agent'.
  */
 function _zooModeSlugFromStem(stem) {
   const cleaned = String(stem || '').trim().replace(/\.md$/, '');
   if (cleaned === '') return 'gsd-agent';
-  return cleaned.startsWith('gsd-') ? cleaned : `gsd-${cleaned}`;
+  const prefixed = cleaned.startsWith('gsd-') ? cleaned : `gsd-${cleaned}`;
+  const sanitized = prefixed
+    .replace(/[^a-zA-Z0-9-]+/g, '-')
+    .replace(/-{2,}/g, '-')
+    .replace(/^-+|-+$/g, '');
+  // '' = all-invalid; a bare 'gsd' means the namespace survived but the agent
+  // name sanitized away entirely — both fall back to the generic slug.
+  return sanitized !== '' && sanitized !== 'gsd' ? sanitized : 'gsd-agent';
 }
 
 /**
