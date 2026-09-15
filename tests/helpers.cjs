@@ -78,6 +78,12 @@ const NON_REGISTRY_CONFIG_LOCATION_ENV_KEYS = [
   'GSD_RUNTIME',
   'GSD_PROJECT',
   'GSD_WORKSTREAM',
+  // #4746 — Zoo Code's global custom_modes.yaml resolves from %APPDATA%
+  // (VS Code extension globalStorage), so an ambiently-set APPDATA lets a
+  // spawned Windows installer write into the developer's real profile. Scrubbed
+  // like the other config-location vars; the zoo writer falls back to
+  // <HOME>/AppData/Roaming, which is sandboxed by the HOME redirect.
+  'APPDATA',
   // #3245: host-session signals GSD now reads (host-runtime-detection.cts's
   // detectHostRuntime / resolveReportedRuntime). Scrubbed for the same reason
   // GSD_RUNTIME is — an ambiently-set CODEX_SANDBOX / (this repo's test suite

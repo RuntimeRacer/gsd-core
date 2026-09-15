@@ -80,6 +80,10 @@ const RUNTIME_META = {
   trae:         { localDir: '.trae',             globalSuffix: '.trae' },
   windsurf:     { localDir: '.windsurf',          globalSuffix: path.join('.codeium', 'windsurf') },
   zcode:        { localDir: '.zcode',             globalSuffix: '.zcode' },
+  // #4746 — Zoo Code (successor of the archived Roo Code): global home ~/.roo;
+  // local installs land at the project root (localTargetIsProjectRoot), like
+  // cline — see the runMinimalInstall local-scope ternary below.
+  zoo:          { localDir: '.roo',               globalSuffix: '.roo' },
 };
 
 /**
@@ -658,13 +662,15 @@ function runMinimalInstall({ runtime, scope, extraArgs = [], installScript = INS
       // table is now single-source so a new runtime cannot reintroduce it.
       // `cline` keeps its ternary: its local artifacts land at the project root
       // itself, which is a genuine exception rather than a directory name.
+      // #4746: zoo joins the exception — localTargetIsProjectRoot lands local
+      // artifacts (.roomodes, .roo/commands/) at the project root too.
       const localMeta = RUNTIME_META[runtime];
-      if (runtime !== 'cline' && (!localMeta || !localMeta.localDir)) {
+      if (runtime !== 'cline' && runtime !== 'zoo' && (!localMeta || !localMeta.localDir)) {
         throw new Error(
           `runMinimalInstall: no RUNTIME_META.localDir for runtime "${runtime}" — refusing to guess a local config dir (#3031)`,
         );
       }
-      configDir = runtime === 'cline' ? root : path.join(root, localMeta.localDir);
+      configDir = (runtime === 'cline' || runtime === 'zoo') ? root : path.join(root, localMeta.localDir);
     }
     args.push(...extraArgs);
     const result = runNode(args, {

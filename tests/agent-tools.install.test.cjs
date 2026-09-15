@@ -298,6 +298,10 @@ test('every installable runtime accepts a configured MCP grant without crashing 
   // not `install.configDir`: a nested-home runtime (e.g. antigravity) places
   // agents in a sibling directory outside its own configDir subtree.
   const NO_SUBAGENT_TOOLKIT = new Set(['pi']); // programmatic dispatch, no named-dispatch agent files
+  // #4746 — zoo: no agents kind; GSD agents become custom MODES (.roomodes /
+  // global custom_modes.yaml), never agent files, so there is no gsd-executor
+  // artifact to emit on this surface.
+  const NO_AGENT_FILE_RUNTIMES = new Set(['zoo']);
   // Runtimes empirically verified (see PR #4238 remediation) to pass an
   // arbitrary mcp__ grant through recognizably — either verbatim or via
   // Kilo's {server}_{tool} transform. Every other runtime filters unknown
@@ -308,6 +312,7 @@ test('every installable runtime accepts a configured MCP grant without crashing 
   const GRANT_SURVIVES_RECOGNIZABLY = new Set(['claude', 'codex', 'copilot', 'hermes', 'kimi-code', 'kilo', 'qwen']);
   for (const runtime of Object.keys(RUNTIME_META)) {
     if (NO_SUBAGENT_TOOLKIT.has(runtime)) continue;
+    if (NO_AGENT_FILE_RUNTIMES.has(runtime)) continue;
     const install = installRuntime(t, runtime, {
       defaults: { agent_tools: { 'gsd-executor': ['mcp__smoke__probe'] } },
       scope: 'global',

@@ -959,7 +959,7 @@ if (hasMinimal && _profileArgRaw) {
 
 function selectRuntimesFromArgs(runtimeArgs) {
   if (runtimeArgs.includes('--all')) {
-    return ['claude', 'kimi', 'kimi-code', 'kilo', 'opencode', 'pi', 'codex', 'copilot', 'antigravity', 'cursor', 'windsurf', 'augment', 'trae', 'qwen', 'hermes', 'codebuddy', 'cline', 'zcode'];
+    return ['claude', 'kimi', 'kimi-code', 'kilo', 'opencode', 'pi', 'codex', 'copilot', 'antigravity', 'cursor', 'windsurf', 'augment', 'trae', 'qwen', 'hermes', 'codebuddy', 'cline', 'zcode', 'zoo'];
   }
   if (runtimeArgs.includes('--both')) {
     return ['claude', 'opencode'];
@@ -984,6 +984,8 @@ function selectRuntimesFromArgs(runtimeArgs) {
   if (runtimeArgs.includes('--codebuddy')) selected.push('codebuddy');
   if (runtimeArgs.includes('--cline')) selected.push('cline');
   if (runtimeArgs.includes('--zcode')) selected.push('zcode');
+  // #4746 — Zoo Code (successor of the archived Roo Code), mirroring --cline.
+  if (runtimeArgs.includes('--zoo')) selected.push('zoo');
   return selected;
 }
 
@@ -1187,7 +1189,7 @@ const banner = '\n' +
   '  GSD Core ' + dim + 'v' + pkg.version + reset + '\n' +
   '  Git. Ship. Done.\n' +
   '  A meta-prompting, context engineering and spec-driven\n' +
-  '  development workflows for Claude Code, OpenCode, Kimi CLI, Kilo, Codex, Copilot, Antigravity, Cursor, Windsurf, Augment, Trae, Qwen Code, Hermes Agent, Cline, CodeBuddy, ZCode and pi.\n';
+  '  development workflows for Claude Code, OpenCode, Kimi CLI, Kilo, Codex, Copilot, Antigravity, Cursor, Windsurf, Augment, Trae, Qwen Code, Hermes Agent, Cline, CodeBuddy, ZCode, Zoo Code and pi.\n';
 
 // Pure seam: parse --config-dir / -c from an arbitrary args array.
 // Returns the path string, '' for an empty equals-form value, or null when the
@@ -1252,7 +1254,7 @@ if (hasUninstall) {
 
 // Show help if requested
 if (hasHelp) {
-  console.log(`  ${yellow}Usage:${reset} npx ${pkg.name} [options]\n\n  ${yellow}Options:${reset}\n    ${cyan}-g, --global${reset}              Install globally (to config directory)\n    ${cyan}-l, --local${reset}               Install locally (to current directory)\n    ${cyan}--claude${reset}                  Install for Claude Code only\n    ${cyan}--opencode${reset}                Install for OpenCode only\n    ${cyan}--kilo${reset}                    Install for Kilo only\n    ${cyan}--codex${reset}                   Install for Codex only\n    ${cyan}--kimi${reset}                    Install for Kimi CLI only\n    ${cyan}--kimi-code${reset}               Install for Kimi Code only\n    ${cyan}--copilot${reset}                 Install for Copilot only\n    ${cyan}--antigravity${reset}             Install for Antigravity only\n    ${cyan}--cursor${reset}                  Install for Cursor only\n    ${cyan}--windsurf${reset}                Install for Windsurf only\n    ${cyan}--augment${reset}                 Install for Augment only\n    ${cyan}--trae${reset}                    Install for Trae only\n    ${cyan}--qwen${reset}                    Install for Qwen Code only\n    ${cyan}--hermes${reset}                  Install for Hermes Agent only\n    ${cyan}--cline${reset}                   Install for Cline only\n    ${cyan}--codebuddy${reset}              Install for CodeBuddy only\n    ${cyan}--zcode${reset}                  Install for ZCode only\n    ${cyan}--pi${reset}                      Install for Pi only\n    ${cyan}--gemini${reset}                  Install for Gemini CLI only\n    ${cyan}--all${reset}                     Install for all runtimes\n    ${cyan}-u, --uninstall${reset}           Uninstall GSD (remove all GSD files)\n    ${cyan}-c, --config-dir <path>${reset}   Specify custom config directory\n    ${cyan}--no-legacy-cleanup${reset}          Skip the legacy get-shit-done-cc artifact scan\n                              (an explicit --config-dir already scopes the scan to it)\n    ${cyan}-h, --help${reset}                Show this help message\n    ${cyan}--force-statusline${reset}        Replace existing statusline config\n    ${cyan}--portable-hooks${reset}          Emit \$HOME-relative hook paths in settings.json\n                              and resolve the node runner at hook-fire time via\n                              hooks/gsd-node-runner.sh (WSL/Docker bind-mount\n                              setups; also GSD_PORTABLE_HOOKS=1)\n    ${cyan}--reclaim-kimi-legacy${reset}     With --kimi-code: also remove the GSD hooks a\n                              pre-1.10.0 --kimi-code install orphaned in ~/.kimi.\n                              Opt-in — those artifacts are indistinguishable from\n                              Kimi CLI's own, so skip it if you use Kimi CLI too.\n    ${cyan}--profile=<name>${reset}         Install a named skill profile. Profiles:\n                              core     — ${PROFILES.core.length} main-loop skills incl. phase (~130 desc tokens)\n                              standard — ${PROFILES.standard.length} skills incl. phase, review, config (~700)\n                              full     — all skills (default)\n                              Composable: --profile=core,audit installs union of closures.\n                              Profile is persisted and respected by \`gsd update\`.\n    ${cyan}--minimal${reset}                 Alias for --profile=core (back-compat).\n                              Cuts cold-start overhead from ~12k tokens to ~700.\n                              Alias: --core-only.\n\n  ${yellow}Examples:${reset}\n    ${dim}# Interactive install (prompts for runtime and location)${reset}\n    npx ${pkg.name}\n\n    ${dim}# Install for Claude Code globally${reset}\n    npx ${pkg.name} --claude --global\n\n    ${dim}# Install for Kilo globally${reset}\n    npx ${pkg.name} --kilo --global\n\n    ${dim}# Install for Codex globally${reset}\n    npx ${pkg.name} --codex --global\n\n    ${dim}# Install for Kimi CLI globally${reset}\n    npx ${pkg.name} --kimi --global\n\n    ${dim}# Install for Kimi Code globally (its own ~/.kimi-code root)${reset}\n    npx ${pkg.name} --kimi-code --global\n\n    ${dim}# Kimi Code, also reclaiming hooks a pre-1.10.0 install left in ~/.kimi${reset}\n    npx ${pkg.name} --kimi-code --global --reclaim-kimi-legacy\n\n    ${dim}# Install for Copilot globally${reset}\n    npx ${pkg.name} --copilot --global\n\n    ${dim}# Install for Copilot locally${reset}\n    npx ${pkg.name} --copilot --local\n\n    ${dim}# Install for Antigravity globally${reset}\n    npx ${pkg.name} --antigravity --global\n\n    ${dim}# Install for Antigravity locally${reset}\n    npx ${pkg.name} --antigravity --local\n\n    ${dim}# Install for Cursor globally${reset}\n    npx ${pkg.name} --cursor --global\n\n    ${dim}# Install for Cursor locally${reset}\n    npx ${pkg.name} --cursor --local\n\n    ${dim}# Install for Windsurf globally${reset}\n    npx ${pkg.name} --windsurf --global\n\n    ${dim}# Install for Windsurf locally${reset}\n    npx ${pkg.name} --windsurf --local\n\n    ${dim}# Install for Augment globally${reset}\n    npx ${pkg.name} --augment --global\n\n    ${dim}# Install for Augment locally${reset}\n    npx ${pkg.name} --augment --local\n\n    ${dim}# Install for Trae globally${reset}\n    npx ${pkg.name} --trae --global\n\n    ${dim}# Install for Trae locally${reset}\n    npx ${pkg.name} --trae --local\n\n    ${dim}# Install for Hermes Agent globally${reset}\n    npx ${pkg.name} --hermes --global\n\n    ${dim}# Install for Hermes Agent locally${reset}\n    npx ${pkg.name} --hermes --local\n\n    ${dim}# Install for Cline globally${reset}\n    npx ${pkg.name} --cline --global\n\n    ${dim}# Install for Cline locally${reset}\n    npx ${pkg.name} --cline --local\n\n    ${dim}# Install for CodeBuddy globally${reset}\n    npx ${pkg.name} --codebuddy --global\n\n    ${dim}# Install for CodeBuddy locally${reset}\n    npx ${pkg.name} --codebuddy --local\n\n    ${dim}# Install for all runtimes globally${reset}\n    npx ${pkg.name} --all --global\n\n    ${dim}# Install to custom config directory${reset}\n    npx ${pkg.name} --kilo --global --config-dir ~/.kilo-work\n\n    ${dim}# Install to current project only${reset}\n    npx ${pkg.name} --claude --local\n\n    ${dim}# Uninstall GSD from Cursor globally${reset}\n    npx ${pkg.name} --cursor --global --uninstall\n\n  ${yellow}Notes:${reset}\n    The --config-dir option is useful when you have multiple configurations.\n    It takes priority over CLAUDE_CONFIG_DIR / OPENCODE_CONFIG_DIR / KILO_CONFIG_DIR / CODEX_HOME / KIMI_CONFIG_DIR / COPILOT_CONFIG_DIR / COPILOT_HOME / ANTIGRAVITY_CONFIG_DIR / CURSOR_CONFIG_DIR / WINDSURF_CONFIG_DIR / AUGMENT_CONFIG_DIR / TRAE_CONFIG_DIR / QWEN_CONFIG_DIR / HERMES_HOME / CLINE_CONFIG_DIR / CODEBUDDY_CONFIG_DIR environment variables.\n    Kimi CLI defaults to the first existing generic skills root: ${cyan}~/.config/agents/skills${reset}, then ${cyan}~/.agents/skills${reset}; if neither exists, GSD creates ${cyan}~/.config/agents${reset}.\n    Kimi CLI and Kimi Code are separate products with separate hook roots: use ${cyan}--kimi${reset} (${cyan}~/.kimi${reset}, ${cyan}KIMI_SHARE_DIR${reset}) or ${cyan}--kimi-code${reset} (${cyan}~/.kimi-code${reset}, ${cyan}KIMI_CODE_HOME${reset}).\n`);
+  console.log(`  ${yellow}Usage:${reset} npx ${pkg.name} [options]\n\n  ${yellow}Options:${reset}\n    ${cyan}-g, --global${reset}              Install globally (to config directory)\n    ${cyan}-l, --local${reset}               Install locally (to current directory)\n    ${cyan}--claude${reset}                  Install for Claude Code only\n    ${cyan}--opencode${reset}                Install for OpenCode only\n    ${cyan}--kilo${reset}                    Install for Kilo only\n    ${cyan}--codex${reset}                   Install for Codex only\n    ${cyan}--kimi${reset}                    Install for Kimi CLI only\n    ${cyan}--kimi-code${reset}               Install for Kimi Code only\n    ${cyan}--copilot${reset}                 Install for Copilot only\n    ${cyan}--antigravity${reset}             Install for Antigravity only\n    ${cyan}--cursor${reset}                  Install for Cursor only\n    ${cyan}--windsurf${reset}                Install for Windsurf only\n    ${cyan}--augment${reset}                 Install for Augment only\n    ${cyan}--trae${reset}                    Install for Trae only\n    ${cyan}--qwen${reset}                    Install for Qwen Code only\n    ${cyan}--hermes${reset}                  Install for Hermes Agent only\n    ${cyan}--cline${reset}                   Install for Cline only\n    ${cyan}--codebuddy${reset}              Install for CodeBuddy only\n    ${cyan}--zcode${reset}                  Install for ZCode only\n    ${cyan}--zoo${reset}                     Install for Zoo Code only\n    ${cyan}--pi${reset}                      Install for Pi only\n    ${cyan}--gemini${reset}                  Install for Gemini CLI only\n    ${cyan}--all${reset}                     Install for all runtimes\n    ${cyan}-u, --uninstall${reset}           Uninstall GSD (remove all GSD files)\n    ${cyan}-c, --config-dir <path>${reset}   Specify custom config directory\n    ${cyan}--no-legacy-cleanup${reset}          Skip the legacy get-shit-done-cc artifact scan\n                              (an explicit --config-dir already scopes the scan to it)\n    ${cyan}-h, --help${reset}                Show this help message\n    ${cyan}--force-statusline${reset}        Replace existing statusline config\n    ${cyan}--portable-hooks${reset}          Emit \$HOME-relative hook paths in settings.json\n                              and resolve the node runner at hook-fire time via\n                              hooks/gsd-node-runner.sh (WSL/Docker bind-mount\n                              setups; also GSD_PORTABLE_HOOKS=1)\n    ${cyan}--reclaim-kimi-legacy${reset}     With --kimi-code: also remove the GSD hooks a\n                              pre-1.10.0 --kimi-code install orphaned in ~/.kimi.\n                              Opt-in — those artifacts are indistinguishable from\n                              Kimi CLI's own, so skip it if you use Kimi CLI too.\n    ${cyan}--profile=<name>${reset}         Install a named skill profile. Profiles:\n                              core     — ${PROFILES.core.length} main-loop skills incl. phase (~130 desc tokens)\n                              standard — ${PROFILES.standard.length} skills incl. phase, review, config (~700)\n                              full     — all skills (default)\n                              Composable: --profile=core,audit installs union of closures.\n                              Profile is persisted and respected by \`gsd update\`.\n    ${cyan}--minimal${reset}                 Alias for --profile=core (back-compat).\n                              Cuts cold-start overhead from ~12k tokens to ~700.\n                              Alias: --core-only.\n\n  ${yellow}Examples:${reset}\n    ${dim}# Interactive install (prompts for runtime and location)${reset}\n    npx ${pkg.name}\n\n    ${dim}# Install for Claude Code globally${reset}\n    npx ${pkg.name} --claude --global\n\n    ${dim}# Install for Kilo globally${reset}\n    npx ${pkg.name} --kilo --global\n\n    ${dim}# Install for Codex globally${reset}\n    npx ${pkg.name} --codex --global\n\n    ${dim}# Install for Kimi CLI globally${reset}\n    npx ${pkg.name} --kimi --global\n\n    ${dim}# Install for Kimi Code globally (its own ~/.kimi-code root)${reset}\n    npx ${pkg.name} --kimi-code --global\n\n    ${dim}# Kimi Code, also reclaiming hooks a pre-1.10.0 install left in ~/.kimi${reset}\n    npx ${pkg.name} --kimi-code --global --reclaim-kimi-legacy\n\n    ${dim}# Install for Copilot globally${reset}\n    npx ${pkg.name} --copilot --global\n\n    ${dim}# Install for Copilot locally${reset}\n    npx ${pkg.name} --copilot --local\n\n    ${dim}# Install for Antigravity globally${reset}\n    npx ${pkg.name} --antigravity --global\n\n    ${dim}# Install for Antigravity locally${reset}\n    npx ${pkg.name} --antigravity --local\n\n    ${dim}# Install for Cursor globally${reset}\n    npx ${pkg.name} --cursor --global\n\n    ${dim}# Install for Cursor locally${reset}\n    npx ${pkg.name} --cursor --local\n\n    ${dim}# Install for Windsurf globally${reset}\n    npx ${pkg.name} --windsurf --global\n\n    ${dim}# Install for Windsurf locally${reset}\n    npx ${pkg.name} --windsurf --local\n\n    ${dim}# Install for Augment globally${reset}\n    npx ${pkg.name} --augment --global\n\n    ${dim}# Install for Augment locally${reset}\n    npx ${pkg.name} --augment --local\n\n    ${dim}# Install for Trae globally${reset}\n    npx ${pkg.name} --trae --global\n\n    ${dim}# Install for Trae locally${reset}\n    npx ${pkg.name} --trae --local\n\n    ${dim}# Install for Hermes Agent globally${reset}\n    npx ${pkg.name} --hermes --global\n\n    ${dim}# Install for Hermes Agent locally${reset}\n    npx ${pkg.name} --hermes --local\n\n    ${dim}# Install for Cline globally${reset}\n    npx ${pkg.name} --cline --global\n\n    ${dim}# Install for Cline locally${reset}\n    npx ${pkg.name} --cline --local\n\n    ${dim}# Install for CodeBuddy globally${reset}\n    npx ${pkg.name} --codebuddy --global\n\n    ${dim}# Install for CodeBuddy locally${reset}\n    npx ${pkg.name} --codebuddy --local\n\n    ${dim}# Install for Zoo Code globally${reset}\n    npx ${pkg.name} --zoo --global\n\n    ${dim}# Install for Zoo Code locally${reset}\n    npx ${pkg.name} --zoo --local\n\n    ${dim}# Install for all runtimes globally${reset}\n    npx ${pkg.name} --all --global\n\n    ${dim}# Install to custom config directory${reset}\n    npx ${pkg.name} --kilo --global --config-dir ~/.kilo-work\n\n    ${dim}# Install to current project only${reset}\n    npx ${pkg.name} --claude --local\n\n    ${dim}# Uninstall GSD from Cursor globally${reset}\n    npx ${pkg.name} --cursor --global --uninstall\n\n    ${dim}# Uninstall GSD from Zoo Code locally${reset}\n    npx ${pkg.name} --zoo --local --uninstall\n\n  ${yellow}Notes:${reset}\n    The --config-dir option is useful when you have multiple configurations.\n    It takes priority over CLAUDE_CONFIG_DIR / OPENCODE_CONFIG_DIR / KILO_CONFIG_DIR / CODEX_HOME / KIMI_CONFIG_DIR / COPILOT_CONFIG_DIR / COPILOT_HOME / ANTIGRAVITY_CONFIG_DIR / CURSOR_CONFIG_DIR / WINDSURF_CONFIG_DIR / AUGMENT_CONFIG_DIR / TRAE_CONFIG_DIR / QWEN_CONFIG_DIR / HERMES_HOME / CLINE_CONFIG_DIR / CODEBUDDY_CONFIG_DIR / ZOO_CONFIG_DIR / ROO_CONFIG_DIR environment variables.\n    Kimi CLI defaults to the first existing generic skills root: ${cyan}~/.config/agents/skills${reset}, then ${cyan}~/.agents/skills${reset}; if neither exists, GSD creates ${cyan}~/.config/agents${reset}.\n    Kimi CLI and Kimi Code are separate products with separate hook roots: use ${cyan}--kimi${reset} (${cyan}~/.kimi${reset}, ${cyan}KIMI_SHARE_DIR${reset}) or ${cyan}--kimi-code${reset} (${cyan}~/.kimi-code${reset}, ${cyan}KIMI_CODE_HOME${reset}).\n`);
   process.exit(0);
 }
 
@@ -6858,6 +6860,262 @@ function writeClineArtifacts(targetDir, isGlobalInstall) {
   return hooksSurface.writeClineArtifacts(targetDir, isGlobalInstall);
 }
 
+// ── Zoo Code custom-modes surface (#4746) ───────────────────────────────────
+// Zoo Code (successor of the archived Roo Code) reads GSD agents as CUSTOM
+// MODES, not agent files:
+//   - global: <vscodeUserDir>/globalStorage/zoocodeorganization.zoo-code/
+//             settings/custom_modes.yaml  (VS Code extension globalStorage)
+//   - local:  <projectRoot>/.roomodes
+// The flat commands surface (gsd-*.md under .roo/commands/) is emitted by the
+// layout-driven path (artifactLayout commands kind). This surface writes ONLY
+// the modes files — no settings.json, no statusline, no hooks — and the
+// dispatch branch early-returns the cline-rules-style
+// { settingsPath: null, ... } shape.
+//
+// Serialization is a port of the retired gsd-roo-code fork's installRooModes
+// (harmony-ai-solutions/gsd-roo-code bin/install.js) — hand-rolled YAML (no
+// yaml dependency): `customModes:` header, 2-space `  - slug:` entries,
+// `roleDefinition: |` literal block with body lines indented 6 spaces (empty
+// lines emitted empty), optional `whenToUse`, `groups:` list, then
+// `source: <global|project>`.
+//
+// IMPORTANT (plan correction verified against the shipped Zoo extension
+// bundle, #4746): Zoo NEVER reads the legacy Roo globalStorage path
+// (rooveterinaryinc.roo-cline) — only the lowercase zoo ext id
+// (zoocodeorganization.zoo-code) is written, always creating directories
+// recursively.
+
+/**
+ * #4746 — Serialize a scalar to YAML, quoting only when needed. Port of the
+ * retired fork's yamlScalar (byte-for-byte regex/escape semantics).
+ */
+function zooYamlScalar(s) {
+  if (s === null || s === undefined || s === '') return '""';
+  const str = String(s);
+  if (
+    /[:#\[\]{},|>&*!'"\\%@`]/.test(str) ||
+    /^\s|\s$/.test(str) ||
+    /^(true|false|null|yes|no|on|off)$/i.test(str)
+  ) {
+    return '"' + str.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n') + '"';
+  }
+  return str;
+}
+
+/**
+ * #4746 — Serialize one Zoo mode entry to YAML lines. Port of the retired
+ * fork's modeToYamlLines (2-space `  - slug:` entry indent under `customModes:`,
+ * `roleDefinition: |` literal block, 6-space body indent, empty body lines
+ * emitted empty, 4-space groups list + source).
+ */
+function zooModeToYamlLines(mode) {
+  const lines = [];
+  lines.push(`  - slug: ${zooYamlScalar(mode.slug)}`);
+  lines.push(`    name: ${zooYamlScalar(mode.name)}`);
+  // roleDefinition is multi-line — use a YAML literal block scalar.
+  lines.push('    roleDefinition: |');
+  for (const line of mode.roleDefinition.split('\n')) {
+    lines.push(line.length > 0 ? '      ' + line : '');
+  }
+  if (mode.whenToUse) {
+    lines.push(`    whenToUse: ${zooYamlScalar(mode.whenToUse)}`);
+  }
+  lines.push('    groups:');
+  for (const g of mode.groups) {
+    lines.push(`    - ${zooYamlScalar(g)}`);
+  }
+  if (mode.source) {
+    lines.push(`    source: ${zooYamlScalar(mode.source)}`);
+  }
+  return lines;
+}
+
+/**
+ * #4746 — Merge GSD mode entries into an existing Zoo modes file, preserving
+ * non-GSD entries. Port of the retired fork's mergeRooCustomModes: split on
+ * `(?=^  - slug:)m` boundaries (2-space indent under `customModes:`), discard
+ * every block whose slug starts with `gsd-`, append the fresh entries. LF
+ * output with a trailing newline. Idempotent by construction: re-running
+ * replaces the gsd-* blocks and leaves user modes byte-for-byte.
+ */
+function mergeZooCustomModes(existingContent, newEntries) {
+  const parts = existingContent.split(/(?=^  - slug:)/m);
+  const header = parts[0]; // "customModes:\n" or similar leading content
+  const existingBlocks = parts.slice(1);
+
+  // Keep only non-GSD entries.
+  const kept = existingBlocks.filter((block) => {
+    const m = block.match(/^  - slug:\s*(\S+)/);
+    return !m || !m[1].startsWith('gsd-');
+  });
+
+  const gsdYamlLines = [];
+  for (const entry of newEntries) {
+    gsdYamlLines.push(...zooModeToYamlLines(entry));
+  }
+
+  return header + kept.join('') + gsdYamlLines.join('\n') + '\n';
+}
+
+/**
+ * #4746 — Resolve the Zoo modes target file. Injectable env/home for hermetic
+ * tests (defaults to process.env / os.homedir()).
+ *
+ *   global: <vscodeUserDir>/globalStorage/zoocodeorganization.zoo-code/
+ *           settings/custom_modes.yaml
+ *           where vscodeUserDir = win32 %APPDATA%\Code\User (APPDATA env),
+ *                                 darwin ~/Library/Application Support/Code/User,
+ *                                 else ~/.config/Code/User
+ *   local:  <targetDir>/.roomodes (targetDir is the project root for zoo —
+ *           hostBehaviors.localTargetIsProjectRoot)
+ *
+ * The lowercase ext id `zoocodeorganization.zoo-code` is deliberate: VS Code
+ * derives globalStorage from the lowercased publisher.name, and Zoo never
+ * reads the legacy Roo (rooveterinaryinc.roo-cline) path (#4746).
+ */
+function resolveZooModesPath(targetDir, isGlobal, opts = {}) {
+  const env = opts.env || process.env;
+  const home = opts.home || os.homedir();
+  if (isGlobal) {
+    let vscodeUserDir;
+    if (process.platform === 'win32') {
+      vscodeUserDir = path.join(env.APPDATA || path.join(home, 'AppData', 'Roaming'), 'Code', 'User');
+    } else if (process.platform === 'darwin') {
+      vscodeUserDir = path.join(home, 'Library', 'Application Support', 'Code', 'User');
+    } else {
+      vscodeUserDir = path.join(home, '.config', 'Code', 'User');
+    }
+    return path.join(vscodeUserDir, 'globalStorage', 'zoocodeorganization.zoo-code', 'settings', 'custom_modes.yaml');
+  }
+  return path.join(targetDir, '.roomodes');
+}
+
+/**
+ * #4746 — Install GSD agents as Zoo Code custom modes.
+ *
+ * Reads the staged agents source (agentsSrc, already profile-filtered by
+ * _stageAgents) and converts each gsd-*.md agent through
+ * convertClaudeAgentToZooModeEntry (runtimeArtifactConversion), adds
+ * `source: global|project` from the install scope, and merges the serialized
+ * entries into the Zoo modes file (customModes: YAML). Idempotent — a re-run
+ * replaces the gsd-* blocks and preserves user modes byte-for-byte.
+ *
+ * @param {string}  targetDir  runtime config dir (global: ~/.roo; local:
+ *                             project root per localTargetIsProjectRoot)
+ * @param {string}  agentsSrc  staged GSD agents source dir (may be absent or
+ *                             empty for a minimal/core profile)
+ * @param {boolean} isGlobal   true for global installs
+ * @param {object}  [opts]     injection bag { env, home } for hermetic tests
+ * @returns {{ configPath: string|null, modeCount: number, wrote: boolean }}
+ *          wrote=false when agentsSrc is absent or has no gsd-*.md agents.
+ */
+function installZooModes(targetDir, agentsSrc, isGlobal, opts = {}) {
+  if (!agentsSrc || !fs.existsSync(agentsSrc)) {
+    return { configPath: null, modeCount: 0, wrote: false };
+  }
+  const agentFiles = fs.readdirSync(agentsSrc).filter((f) => f.startsWith('gsd-') && f.endsWith('.md'));
+  if (agentFiles.length === 0) {
+    return { configPath: null, modeCount: 0, wrote: false };
+  }
+
+  console.log(`  ${green}✓${reset} Preparing ${agentFiles.length} Zoo Code custom modes`);
+
+  const configPath = resolveZooModesPath(targetDir, isGlobal, opts);
+  const pathPrefix = isGlobal ? `${targetDir.replace(/\\/g, '/')}/` : `./.roo/`;
+  const modesEntries = [];
+
+  for (const file of agentFiles) {
+    const content = fs.readFileSync(path.join(agentsSrc, file), 'utf8');
+    const agentName = file.replace(/\.md$/, '');
+    // The converter derives slug/name/whenToUse from the file stem +
+    // frontmatter (file-based slug derivation, #4746). `source` is added here
+    // from the install scope — the converter deliberately does NOT emit it.
+    const entry = runtimeArtifactConversion.convertClaudeAgentToZooModeEntry(
+      content,
+      { pathPrefix, isGlobal, fileName: file, agentName },
+      { agentName },
+    );
+    entry.source = isGlobal ? 'global' : 'project';
+    modesEntries.push(entry);
+  }
+
+  fs.mkdirSync(path.dirname(configPath), { recursive: true });
+
+  if (fs.existsSync(configPath)) {
+    const existing = fs.readFileSync(configPath, 'utf8');
+    const merged = mergeZooCustomModes(existing, modesEntries);
+    fs.writeFileSync(configPath, merged);
+    const display = isGlobal ? configPath.replace(os.homedir(), '~') : `.roomodes`;
+    console.log(`  ${green}✓${reset} Merged GSD modes into ${cyan}${display}${reset}`);
+  } else {
+    const freshYamlLines = ['customModes:'];
+    for (const mode of modesEntries) {
+      freshYamlLines.push(...zooModeToYamlLines(mode));
+    }
+    fs.writeFileSync(configPath, freshYamlLines.join('\n') + '\n');
+    const display = isGlobal ? configPath.replace(os.homedir(), '~') : `.roomodes`;
+    console.log(`  ${green}✓${reset} Wrote Zoo modes to ${cyan}${display}${reset}`);
+  }
+
+  return { configPath, modeCount: modesEntries.length, wrote: true };
+}
+
+/**
+ * #4746 — Strip every `  - slug: gsd-*` block from Zoo modes YAML content.
+ * Returns null when the file becomes GSD-only (trims to `customModes:` or
+ * empty) — the caller deletes it then. Otherwise returns the cleaned content
+ * (user modes preserved byte-for-byte).
+ */
+function stripGsdBlocksFromZooModes(content) {
+  const parts = content.split(/(?=^  - slug:)/m);
+  const header = parts[0];
+  const kept = parts.slice(1).filter((block) => {
+    const m = block.match(/^  - slug:\s*(\S+)/);
+    return !m || !m[1].startsWith('gsd-');
+  });
+  const cleaned = header + kept.join('');
+  if (cleaned.trim() === 'customModes:' || cleaned.trim() === '') return null;
+  return cleaned;
+}
+
+/**
+ * #4746 — Uninstall Zoo Code custom modes: strip every `  - slug: gsd-*`
+ * block from the scope's modes file (global custom_modes.yaml, or local
+ * .roomodes). The flat commands/gsd-*.md are removed by the layout-driven
+ * uninstall path (artifactLayout commands kind); this covers the modes
+ * surface only. User modes are preserved byte-for-byte; a file left with only
+ * the `customModes:` header (or nothing) is deleted.
+ *
+ * @param {string}  targetDir  runtime config dir (global: ~/.roo; local:
+ *                             project root)
+ * @param {boolean} isGlobal   true for global installs
+ * @param {object}  [opts]     injection bag { env, home } for hermetic tests
+ * @returns {number} 1 when the file was modified or removed, else 0.
+ */
+function uninstallZooModes(targetDir, isGlobal, opts = {}) {
+  const configPath = resolveZooModesPath(targetDir, isGlobal, opts);
+  if (!fs.existsSync(configPath)) return 0;
+
+  const existing = fs.readFileSync(configPath, 'utf8');
+  const parts = existing.split(/(?=^  - slug:)/m);
+  const kept = parts.slice(1).filter((block) => {
+    const m = block.match(/^  - slug:\s*(\S+)/);
+    return !m || !m[1].startsWith('gsd-');
+  });
+  if (kept.length >= parts.length - 1) return 0; // no gsd-* block present
+
+  const cleaned = parts[0] + kept.join('');
+  const modesFileName = isGlobal ? 'custom_modes.yaml' : '.roomodes';
+  if (cleaned.trim() === 'customModes:' || cleaned.trim() === '') {
+    fs.unlinkSync(configPath);
+    console.log(`  ${green}✓${reset} Removed ${modesFileName} (was GSD-only)`);
+  } else {
+    fs.writeFileSync(configPath, cleaned);
+    console.log(`  ${green}✓${reset} Stripped GSD modes from ${modesFileName}`);
+  }
+  return 1;
+}
+
 // ── Cursor hooks.json reconciler (issue #777) ────────────────────────────────
 //
 // Cursor v2.4+ supports a hooks.json lifecycle hook system. GSD registers two
@@ -8585,6 +8843,18 @@ function uninstall(isGlobal, runtime = DEFAULT_RUNTIME) {
     }
   }
 
+  // 1b-zoo. Non-layout Zoo Code side-effects (#4746): strip every gsd-* block
+  // from the scope's custom-modes file (global custom_modes.yaml, or local
+  // .roomodes). The flat commands/gsd-*.md under .roo/commands/ are removed
+  // by the layout-driven uninstall path above (artifactLayout commands kind);
+  // this block covers the modes surface only. User modes are preserved
+  // byte-for-byte; a file left with only the `customModes:` header (or
+  // nothing) is deleted.
+  // Descriptor-driven: gated on hostBehaviors.zooModesSurface.
+  if (_hostBehaviors(runtime).zooModesSurface) {
+    removedCount += uninstallZooModes(targetDir, isGlobal);
+  }
+
   // 1b-cursor. Descriptor-driven hook-bus cleanup (ADR-1239 / #2089): remove
   // GSD-managed hook entries from hooks.json and clean up the managed hook
   // scripts. Gated by the hostBehaviors.hooksJsonSurface descriptor axis, not a
@@ -9984,6 +10254,37 @@ function writeManifest(configDir, runtime = DEFAULT_RUNTIME, options = {}) {
     }
   }
 
+  // #4746 — Zoo Code: track the flat commands surface (gsd-*.md under the
+  // artifactLayout commands kind — `commands/` global, `.roo/commands/`
+  // local) and the local `.roomodes` modes file. The commands dir is resolved
+  // through the layout so the manifest records what's actually on disk for
+  // both scopes. The GLOBAL custom_modes.yaml lives OUTSIDE configDir (VS
+  // Code extension globalStorage) and — like cline's ~/.agents/AGENTS.md —
+  // is NOT per-configDir-manifest tracked; uninstall strips it explicitly.
+  // `.roomodes` is mixed-ownership (GSD modes + user modes in one file), so a
+  // user mode edit surfaces as a tracked local modification — the same
+  // trade-off as hashing a user-editable surface file, and protective for
+  // patch-backup during update.
+  // Descriptor-driven: gated on hostBehaviors.zooModesSurface.
+  if (_hostBehaviors(runtime).zooModesSurface) {
+    const zooCommandsDir = _kindDestDirSafe(runtime, configDir, resolvedScope, 'commands');
+    if (zooCommandsDir && fs.existsSync(zooCommandsDir)) {
+      for (const file of fs.readdirSync(zooCommandsDir)) {
+        if (file.startsWith('gsd-') && file.endsWith('.md')) {
+          const fullPath = path.join(zooCommandsDir, file);
+          const rel = path.relative(configDir, fullPath).replace(/\\/g, '/');
+          manifest.files[rel] = fileHash(fullPath);
+        }
+      }
+    }
+    if (resolvedScope === 'local') {
+      const roomodesPath = path.join(configDir, '.roomodes');
+      if (fs.existsSync(roomodesPath)) {
+        manifest.files['.roomodes'] = fileHash(roomodesPath);
+      }
+    }
+  }
+
   // Track hook files so saveLocalPatches() can detect user modifications
   // Hooks are only installed for runtimes that use settings.json (not Codex/Copilot/Cline)
   // Descriptor-driven (ADR-1239 / #2089+#2090): cline's exclusion is via
@@ -11305,6 +11606,22 @@ function install(isGlobal, runtime = DEFAULT_RUNTIME, options = {}) {
         } else {
           failures.push('workflows/gsd-*');
         }
+      }
+    } else if (_hostBehaviors(runtime).verificationStyle === 'flat-commands') {
+      // #4746 — Zoo Code: no skills kind, so verify the flat commands surface
+      // resolved through the layout (commands/ global, .roo/commands/ local).
+      const zooCommandsDir = _kindDestDirSafe(runtime, targetDir, scope, 'commands');
+      if (zooCommandsDir && fs.existsSync(zooCommandsDir)) {
+        const cmdCount = fs.readdirSync(zooCommandsDir)
+          .filter(f => f.startsWith('gsd-') && f.endsWith('.md')).length;
+        if (cmdCount > 0) {
+          const relDisplay = path.relative(targetDir, zooCommandsDir).replace(/\\/g, '/') || 'commands';
+          console.log(`  ${green}✓${reset} Installed ${cmdCount} slash commands to ${relDisplay}/`);
+        } else {
+          failures.push('commands/gsd-*');
+        }
+      } else {
+        failures.push('commands/gsd-*');
       }
     } else {
       const skillsDir = _skillsRootDir;
@@ -12801,6 +13118,25 @@ function install(isGlobal, runtime = DEFAULT_RUNTIME, options = {}) {
     return { settingsPath: null, settings: null, statuslineCommand: null, updateBannerCommand: null, runtime, configDir: targetDir };
   }
 
+  if (plan.installSurface === 'zoo-modes') {
+    // #4746 — Zoo Code custom-modes surface: writes GSD agents as custom
+    // modes (global custom_modes.yaml under VS Code extension globalStorage,
+    // or local .roomodes at the project root). The flat commands/gsd-*.md
+    // under .roo/commands/ are emitted by the layout-driven path above. No
+    // settings.json, no statusline, no hooks — same early-return shape as the
+    // cline-rules surface.
+    const zooModesResult = installZooModes(targetDir, agentsSrc, isGlobal);
+    if (!zooModesResult.wrote) {
+      console.log(`  ${dim}•${reset} No GSD agents found — no Zoo custom modes written`);
+    }
+    // Re-run the manifest pass: the commands surface is written *after* the
+    // earlier writeManifest() call, so a second pass is needed to hash-track
+    // it (mirrors the cline-rules branch's pattern).
+    writeManifest(targetDir, runtime, { mode: _effectiveInstallMode, scope: _installScopeId });
+    persistActiveProfileMarker();
+    return { settingsPath: null, settings: null, statuslineCommand: null, updateBannerCommand: null, runtime, configDir: targetDir };
+  }
+
   // Configure statusline and hooks in settings.json (or settings.local.json for local Claude installs).
   // ADR-857 phase 5f-2: drive the hook event dialect from the registry descriptor.
   // runtimes with hookEvents='gemini' use AfterTool/BeforeTool; all others use PostToolUse/PreToolUse.
@@ -13345,10 +13681,13 @@ const runtimeMap = {
   '15': 'qwen',
   '16': 'trae',
   '17': 'windsurf',
-  '18': 'zcode'
+  '18': 'zcode',
+  // #4746 — Zoo Code (successor of the archived Roo Code), appended after
+  // zcode to keep the menu alphabetical; ALL moves to 20.
+  '19': 'zoo'
 };
-const allRuntimes = ['claude', 'antigravity', 'augment', 'cline', 'codebuddy', 'codex', 'copilot', 'cursor', 'hermes', 'kimi', 'kimi-code', 'kilo', 'opencode', 'pi', 'qwen', 'trae', 'windsurf', 'zcode'];
-const ALL_RUNTIMES_OPTION = '19';
+const allRuntimes = ['claude', 'antigravity', 'augment', 'cline', 'codebuddy', 'codex', 'copilot', 'cursor', 'hermes', 'kimi', 'kimi-code', 'kilo', 'opencode', 'pi', 'qwen', 'trae', 'windsurf', 'zcode', 'zoo'];
+const ALL_RUNTIMES_OPTION = '20';
 
 /**
  * Build the runtime-selection prompt text shown by the interactive installer.
@@ -13374,7 +13713,8 @@ function buildRuntimePromptText() {
   ${cyan}16${reset}) Trae         ${dim}(~/.trae)${reset}
   ${cyan}17${reset}) Windsurf     ${dim}(~/.codeium/windsurf)${reset}
   ${cyan}18${reset}) ZCode        ${dim}(~/.zcode)${reset}
-  ${cyan}19${reset}) All
+  ${cyan}19${reset}) Zoo Code     ${dim}(~/.roo)${reset}
+  ${cyan}20${reset}) All
 
   ${dim}Select multiple: 1,2,6 or 1 2 6${reset}
 `;
@@ -14256,6 +14596,13 @@ module.exports = {
     stripGsdFromAgentsMd,
     GSD_AGENTS_MD_MARKER,
     GSD_AGENTS_MD_CLOSE_MARKER,
+    // #4746 — Zoo Code custom-modes surface writer + uninstall (exported for
+    // hermetic tests: the writer accepts injected { env, home }).
+    installZooModes,
+    uninstallZooModes,
+    resolveZooModesPath,
+    mergeZooCustomModes,
+    stripGsdBlocksFromZooModes,
     writeManifest,
     saveLocalPatches,
     reportLocalPatches,

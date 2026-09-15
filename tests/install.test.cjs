@@ -7832,6 +7832,8 @@ describe('#3026: installer --help documents every accepted runtime flag', () => 
       '--copilot', '--antigravity', '--cursor', '--windsurf', '--augment',
       '--trae', '--qwen', '--hermes', '--cline', '--codebuddy',
       '--zcode', '--pi', '--gemini',
+      // #4746 — Zoo Code (successor of the archived Roo Code).
+      '--zoo',
     ];
 
     const missing = acceptedRuntimeFlags.filter(

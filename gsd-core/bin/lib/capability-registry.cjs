@@ -4225,7 +4225,7 @@ const capabilities = {
         "local": [
           {
             "kind": "commands",
-            "destSubpath": "commands",
+            "destSubpath": ".roo/commands",
             "prefix": "gsd-",
             "nesting": "flat",
             "recursive": false,
@@ -4268,6 +4268,7 @@ const capabilities = {
         "skipSharedHooksInstall": true,
         "localTargetIsProjectRoot": true,
         "zooModesSurface": true,
+        "verificationStyle": "flat-commands",
         "reapplyCommand": "/gsd-update --reapply"
       }
     }
@@ -8006,7 +8007,7 @@ const runtimes = {
         "local": [
           {
             "kind": "commands",
-            "destSubpath": "commands",
+            "destSubpath": ".roo/commands",
             "prefix": "gsd-",
             "nesting": "flat",
             "recursive": false,
@@ -8049,6 +8050,7 @@ const runtimes = {
         "skipSharedHooksInstall": true,
         "localTargetIsProjectRoot": true,
         "zooModesSurface": true,
+        "verificationStyle": "flat-commands",
         "reapplyCommand": "/gsd-update --reapply"
       }
     }
