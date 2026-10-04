@@ -45,9 +45,13 @@ describe('#4746 Zoo path replacement (ported replacePathsForRoo vectors)', () =>
     assert.strictEqual(convertClaudeCommandToZooCommand(input, ROO_PREFIX), `Read ${ROO_PREFIX}file.md`);
   });
 
-  test('$HOME/.claude/ path replaced (the 4134ae8 regression vector)', () => {
-    const input = 'INIT=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" init)';
-    const expected = `INIT=$(node "${ROO_PREFIX}get-shit-done/bin/gsd-tools.cjs" init)`;
+  test('$HOME/.claude/ path replaced (the 4134ae8 regression vector) and the legacy runtime-dir segment repaired', () => {
+    // Old-fork vector: the body embeds the PRE-rename get-shit-done/ runtime // gsd-allow-legacy-name
+    // dir. The prefix swap alone used to preserve the stale segment, producing // gsd-allow-legacy-name
+    // .roo/get-shit-done/... references that no install materializes since // gsd-allow-legacy-name
+    // #604 — the segment now renames to gsd-core/ alongside the prefix swap.
+    const input = 'INIT=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" init)'; // gsd-allow-legacy-name
+    const expected = `INIT=$(node "${ROO_PREFIX}gsd-core/bin/gsd-tools.cjs" init)`;
     assert.strictEqual(convertClaudeCommandToZooCommand(input, ROO_PREFIX), expected);
   });
 

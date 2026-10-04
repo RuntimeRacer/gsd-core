@@ -2870,6 +2870,14 @@ function _zooModeNameFromStem(stem) {
  * The trailing-slash-optional forms are the 4134ae8 regression fix (the old
  * fork previously only handled the trailing-slash forms).
  *
+ * Additionally, a legacy pre-rename runtime-dir SEGMENT is repaired: any // gsd-allow-legacy-name
+ * path-context `get-shit-done/` segment (one preceded by `/` — the shape the // gsd-allow-legacy-name
+ * old fork's bodies embedded, e.g. `$HOME/.claude/get-shit-done/bin/gsd-tools.cjs`) // gsd-allow-legacy-name
+ * is renamed to the post-#604 `gsd-core/` segment. Without this, the prefix
+ * swap alone produced `.roo/get-shit-done/...` references that no install has // gsd-allow-legacy-name
+ * materialized since the rename — a ported corpus carrying the legacy token
+ * installed personas pointed at a non-existent runtime dir.
+ *
  * All-or-nothing: when `pathPrefix` is absent or does not look like a path
  * (e.g. the layout's name-dispatch passes a commandName as arg2 — no path
  * contains a slash-free token), NO rewrite is applied. The install-time
@@ -2885,6 +2893,7 @@ function replacePathsForZoo(content, pathPrefix) {
   content = content.replace(/~\/\.claude\/?/g, pathPrefix);
   content = content.replace(/\$HOME\/\.claude\/?/g, pathPrefix);
   content = content.replace(/\.\/\.claude\//g, './.roo/');
+  content = content.replace(/(?<=\/)get-shit-done\//g, 'gsd-core/'); // gsd-allow-legacy-name
   return content;
 }
 

@@ -3925,7 +3925,7 @@ const ZOO_DISPATCH_TOOL_CONFIG = Object.freeze({
  * `capabilities/zoo/capability.json`'s `hostIntegration.dispatch` facts + the
  * caller-supplied tool vocabulary above).
  *
- * DELIBERATELY DISPATCH-ONLY — no brand swap, no path rewrites:
+ * DISPATCH-FIRST — no brand swap, no path rewrites:
  *   - Workflows (`gsd-core/` tree): copyWithPathReplacement already applied the
  *     generic `~/.claude/`→pathPrefix block (zoo's dirName is `.roo`),
  *     `_stampNonClaudeRuntimeDefaults`, and `normalizeAgentBodyForRuntime`
@@ -3937,6 +3937,13 @@ const ZOO_DISPATCH_TOOL_CONFIG = Object.freeze({
  *     descriptor's `converter: "convertClaudeCommandToZooCommand"` +
  *     `_applyRuntimeRewrites`'s `case 'zoo':` seam (src/runtime-artifact-
  *     conversion.cts) — a DIFFERENT seam, exactly as hermes's commands path is.
+ *   - What this converter DOES own beyond the generic projection: the zoo
+ *     LEXICON pre-pass (`_projectZooWorkflowLexicon` below) + its fail-closed
+ *     residual guard (`_assertZooLexiconComplete`) — Claude dispatch
+ *     vocabulary that is not `Agent(...)` call structure and therefore outside
+ *     the #2284 machinery's charter (Skill() calls, "Task tool" gates,
+ *     AskUserQuestion, <available_agent_types> headers, the #3324
+ *     verbatim-inline mandate).
  */
 function convertClaudeToZooWorkflowMarkdown(content, ctx) {
   const runtime = (ctx && ctx.runtime) || 'zoo';
@@ -3945,7 +3952,168 @@ function convertClaudeToZooWorkflowMarkdown(content, ctx) {
     availableRoles: _resolveAvailableGsdRoles(),
     runtime,
   });
-  return projectNamedDispatchToStructuralDelegate(content, dispatch, toolConfig);
+  const lexified = _projectZooWorkflowLexicon(content);
+  const projected = projectNamedDispatchToStructuralDelegate(lexified, dispatch, toolConfig);
+  _assertZooLexiconComplete(projected);
+  return projected;
+}
+
+/**
+ * Zoo lexicon projection — Claude dispatch vocabulary that survives the
+ * generic #2284 machinery because it is not `Agent(...)` call structure.
+ * Measured against the shipped corpus pre-fix: 59 live `Skill(` calls in 14
+ * workflow files, "Task tool" gates in 7, AskUserQuestion in 60, and the
+ * #3324 verbatim-inline mandate in execute-phase.md — all shipped broken on
+ * Zoo (no Skill tool, no TaskOutput, no per-dispatch inlining budget).
+ *
+ *  a. `Skill(skill="gsd-<wf>"[, args="..."])` / `Skill('gsd-<wf>', args=...)`
+ *     / `Skill(skill="gsd-<wf>")` / `Skill("gsd-<wf> [args]")` →
+ *     "read and follow gsd-core/workflows/<wf>.md inline". Zoo has no Skill
+ *     tool and no agent-invocable command surface, so the corpus's flat
+ *     Skill() invocations land as inline workflow follow-through — the same
+ *     semantic the corpus itself prescribes for Skill-less hosts (autonomous.md
+ *     describes its Skill() delegation as inline-by-design). Dynamic
+ *     `${ref.skill}` names survive verbatim (the value resolves at runtime to
+ *     the workflow stem). Non-gsd names (Claude built-ins like update-config)
+ *     become an explicit handle-or-surface note instead of a dangling call.
+ *  b. "Task tool" → "new_task tool" — the sequential-vs-dispatch gates
+ *     (docs-update.md, map-codebase.md friends) must evaluate against Zoo's
+ *     real primitive, which IS available.
+ *  c. AskUserQuestion → ask_followup_question (Zoo's tool name).
+ *  d. <available_agent_types> headers — agents are MODES on Zoo, registered
+ *     in .roomodes / custom_modes.yaml, not .claude/agents/ files.
+ *  e. The #3324 build-time verbatim-inline mandate → subtask self-reads.
+ *     Zoo subtasks have their own file tools and new_task messages never
+ *     expand `@path` either, so the dispatched message keeps the
+ *     required-reading LIST instead of inlining ~2K lines per dispatch.
+ */
+function _projectZooWorkflowLexicon(content) {
+  let out = content;
+  const inlineFollow = (name, args) => {
+    const stem = String(name).replace(/^gsd-/, '');
+    const base = `read and follow gsd-core/workflows/${stem}.md inline`;
+    return args ? `${base} (args: ${args})` : base;
+  };
+  const noSkillNote = (name, args) =>
+    `no Skill tool on this runtime — handle "${name}" inline or surface it to the user` +
+    (args ? ` (args: ${args})` : '');
+  const isGsd = (name) => name.startsWith('gsd-') || name.startsWith('${');
+  // (a1) Skill(skill="NAME", args="ARGS") — double-quoted; \\? tolerates the
+  //      backslash-escaped form embedded inside Agent() prompt strings. The
+  //      name group is slug-chars OR template vars, repeatable — the corpus's
+  //      dynamic form is the MIXED `gsd-${ref.skill}`, not a bare ${...}.
+  out = out.replace(
+    /Skill\(skill=\\?"((?:[a-z0-9-]+|\$\{[a-z][a-z0-9._]*\})+)\\?"\s*,\s*args=\\?"([^"\\]*)\\?"\)/g,
+    (_m, name, args) => (isGsd(name) ? inlineFollow(name, args) : noSkillNote(name, args)),
+  );
+  // (a2) Skill(skill='NAME', args='ARGS') — single-quoted (plan-review-convergence).
+  out = out.replace(
+    /Skill\(skill=\\?'([a-z0-9-]+)\\?'\s*,\s*args=\\?'([^'\\]*)\\?'\)/g,
+    (_m, name, args) => (name.startsWith('gsd-') ? inlineFollow(name, args) : noSkillNote(name, args)),
+  );
+  // (a3) Skill(skill="NAME") — no args.
+  out = out.replace(
+    /Skill\(skill=\\?"((?:[a-z0-9-]+|\$\{[a-z][a-z0-9._]*\})+)\\?"\)/g,
+    (_m, name) => (isGsd(name) ? inlineFollow(name) : noSkillNote(name)),
+  );
+  // (a4) Skill("gsd-NAME [args]") — bare string form.
+  out = out.replace(
+    /Skill\(\\?"gsd-([a-z0-9-]+)(?: ([^"\\]*?))?\\?"\)/g,
+    (_m, name, args) => inlineFollow(`gsd-${name}`, args),
+  );
+  // (b)
+  out = out.replace(/\bTask tool\b/g, 'new_task tool');
+  // (c)
+  out = out.replace(/\bAskUserQuestion\b/g, 'ask_followup_question');
+  // (d)
+  out = out.replace(
+    /Valid GSD subagent types \(use exact names[^):\n]*\):/g,
+    'Valid GSD modes — dispatch each via new_task(mode="<slug>") (use exact names):',
+  );
+  out = out.replace(
+    /These are the valid GSD subagent types registered in \.claude\/agents\/ \(or equivalent for your runtime\)\./g,
+    'These are the valid GSD modes, installed as gsd-* custom-mode entries (.roomodes / custom_modes.yaml).',
+  );
+  out = out.replace(
+    /Valid GSD subagent types registered in \.claude\/agents\//g,
+    'Valid GSD modes, installed as gsd-* custom-mode entries',
+  );
+  // (d2) Claude agent-FILE path references — agents are MODES on Zoo; no
+  //      ~/.claude/agents/gsd-*.md file exists for the subtask to read (its
+  //      mode roleDefinition IS the instruction set). Covers the tilde and
+  //      $HOME anchored forms that survive the generic path rewrite inside
+  //      message= payloads.
+  out = out.replace(
+    /(~|\$HOME)\/\.claude\/agents\/gsd-([a-z0-9-]+)\.md/g,
+    'the gsd-$2 custom mode role definition (loaded automatically when dispatched via new_task(mode="gsd-$2"))',
+  );
+  // (e)
+  out = out.replace(
+    /ORCHESTRATOR build-time embed \(NOT a sub-agent runtime step\): before this dispatch, read each file listed below and replace this note with those files' contents, inlined verbatim in this block in the listed order\. Never leave `@`-include lines in the dispatched prompt — `@path` never expands inside an Agent\(\) `prompt="\.\.\."` string \(#3324\), so an include arrives as literal text the executor never sees\./g,
+    'ZOO DISPATCH CONTEXT — subtask self-reads (NOT inlined): keep the file list below verbatim in the dispatched message as the required-reading list; do NOT inline the files themselves. Zoo subtasks have their own file tools and load these paths directly, and `@path` never expands inside a new_task message either (#3324) — inlining would only bloat the dispatch.',
+  );
+  // (f) Claude-only primitives with no Zoo equivalent — new_task is always
+  //     foreground-blocking (the parent pauses; there is no background
+  //     variant) and returns the subtask result directly (no polling), so
+  //     background-flag guidance and TaskOutput advice are moot: drop the
+  //     lines that reference them rather than ship misleading instructions.
+  //     Runs LAST — call-argument occurrences were already handled inside the
+  //     #2284 span machinery; only prose lines remain here.
+  out = out
+    .split('\n')
+    .filter((line) => !/\bTaskOutput\b|\brun_in_background\b/.test(line))
+    .join('\n');
+  return out;
+}
+
+/**
+ * Fail-closed residual guard for the zoo lexicon pass (companion to the
+ * #2284 post-projection guard, which only owns Agent(...) call structure):
+ * any literal `Skill(...)` DISPATCH SYNTAX that the lexicon rewrites above
+ * did not anticipate must abort the install rather than ship a call to a
+ * tool Zoo does not have. Arg-bearing call forms only — bare prose such as
+ * "via Skill()" or "flat `Skill()` invocations" documents the concept and is
+ * deliberately allowed.
+ */
+function _assertZooLexiconComplete(content) {
+  if (/Skill\(skill=|Skill\(\\?['"]gsd-/i.test(content)) {
+    throw new Error(
+      'zoo workflow install: projection left a literal Skill(...) dispatch call — refusing to install ' +
+      '(fail-closed, zoo lexicon pass)',
+    );
+  }
+}
+
+/**
+ * #4746 follow-up — Zoo mode roleDefinitions are DISPATCH SURFACES too.
+ * convertClaudeAgentToZooModeEntry (src/runtime-artifact-conversion.cts) owns
+ * structure (slug/groups/whenToUse) and the path/brand/tool-name swaps, but
+ * until now the roleDefinition body shipped with Claude-native dispatch
+ * vocabulary verbatim: agents/gsd-debug-session-manager.md carries a live
+ * `Agent(prompt=..., subagent_type="gsd-debugger", model="{...}",
+ * run_in_background=false)` call plus TaskOutput / run_in_background /
+ * AskUserQuestion prose, so the installed Zoo mode instructed the subtask to
+ * use an `Agent` tool none of Zoo's subtasks have. This wrapper runs the SAME
+ * generic #2284 projection + zoo lexicon the workflow corpus gets, then drops
+ * lines that reference Claude-only result-polling/background primitives.
+ */
+function _projectZooModeRoleDefinition(roleDefinition) {
+  const dispatch = _hostIntegrationDispatch('zoo');
+  const toolConfig = Object.assign({}, ZOO_DISPATCH_TOOL_CONFIG, {
+    availableRoles: _resolveAvailableGsdRoles(),
+    runtime: 'zoo',
+  });
+  let out = _projectZooWorkflowLexicon(roleDefinition);
+  out = projectNamedDispatchToStructuralDelegate(out, dispatch, toolConfig);
+  // Claude-only primitives with no Zoo equivalent (new_task is always
+  // foreground-blocking and returns the subtask result directly): drop the
+  // lines that reference them rather than ship misleading advice.
+  out = out
+    .split('\n')
+    .filter((line) => !/\bTaskOutput\b|\brun_in_background\b/.test(line))
+    .join('\n');
+  _assertZooLexiconComplete(out);
+  return out;
 }
 
 // ── End Zoo converters ───────────────────────────────────────────────────────
@@ -7241,6 +7409,17 @@ function installZooModes(targetDir, agentsSrc, isGlobal, opts = {}) {
       { pathPrefix, isGlobal, fileName: file, agentName },
       { agentName },
     );
+    // The roleDefinition is a dispatch surface too: an agent body carrying
+    // live Agent()/Skill() call syntax must ship projected onto new_task(...)
+    // exactly like the workflow corpus (#4746 follow-up) — see
+    // _projectZooModeRoleDefinition.
+    entry.roleDefinition = _projectZooModeRoleDefinition(entry.roleDefinition);
+    if (entry.whenToUse) {
+      // The whenToUse blurb derives from the Claude frontmatter description
+      // and can carry Claude tool vocabulary ("handles checkpoints via
+      // AskUserQuestion") — swap it for the same reason the body is projected.
+      entry.whenToUse = entry.whenToUse.replace(/\bAskUserQuestion\b/g, 'ask_followup_question');
+    }
     entry.source = isGlobal ? 'global' : 'project';
     modesEntries.push(entry);
   }
@@ -14489,6 +14668,12 @@ function maybeSuggestPathExport(globalBin, homeDir) {
 // Covers both local (project-relative) and common global forms.
 const _LEGACY_SCAN_SUBDIR_NAMES = [
   '.claude',
+  '.roo',      // zoo/roo surface (zoo still reads .roo paths) — the scan
+               // previously skipped it entirely, so legacy old-package
+               // artifacts under the roo config dir (foreign-fork skill
+               // mirrors carrying pre-rename runtime paths, stale code
+               // references) were never flagged while a healthy gsd-core
+               // install lived beside them
   '.gemini',
   '.opencode',
   '.config/opencode',

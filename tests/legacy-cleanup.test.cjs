@@ -421,3 +421,27 @@ describe('issue-607 legacy-cleanup: applyLegacyCleanup', () => {
     assert.ok(fs.existsSync(devPrefs), 'dev-preferences.md must survive apply');
   });
 });
+
+// ─── Scan-list coverage: the roo config dir (#607 follow-up) ─────────────────
+//
+// bin/install.js's _LEGACY_SCAN_SUBDIR_NAMES historically omitted '.roo', so
+// the zoo/roo surface was never scanned for legacy old-package artifacts even
+// though foreign-fork installs wrote gsd-* skill mirrors there.
+
+describe('issue-607 legacy-cleanup: the roo config dir is scanned', () => {
+  const { cleanupLegacyGsdCc } = require(path.join(__dirname, '..', 'bin', 'install.js'));
+
+  test('a stale gsd skill mirror under the roo config dir is flagged (stale path signal)', () => {
+    const home = mkTmpDir();
+    try {
+      const stale = path.join(home, '.roo', 'skills', 'gsd-docs-update', 'SKILL.md');
+      writeFile(stale, '---\nname: gsd-docs-update\n---\n@$HOME/.roo/' + 'get-shit-done' + '/workflows/docs-update.md\n'); // gsd-allow-legacy-name
+      const { plan } = cleanupLegacyGsdCc({ homeDir: home, dryRun: true, logger: { log() {} } });
+      const entry = plan.find((e) => e.path === stale);
+      assert.ok(entry, 'stale roo skill mirror appears in the cleanup plan');
+      assert.strictEqual(entry.reason, 'stale-get-shit-done-path'); // gsd-allow-legacy-name
+    } finally {
+      cleanup(home);
+    }
+  });
+});

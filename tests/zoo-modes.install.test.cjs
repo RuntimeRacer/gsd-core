@@ -194,6 +194,82 @@ describe('#4746 installZooModes local — .roomodes emission + merge + uninstall
   });
 });
 
+// ─── Mode roleDefinition dispatch projection (#4746 follow-up) ────────────────
+//
+// Mode roleDefinitions are dispatch surfaces too: pre-fix, an agent body with
+// a live Agent(...) call (agents/gsd-debug-session-manager.md is the corpus's
+// only one) shipped VERBATIM as a Zoo mode — telling the subtask to use an
+// `Agent` tool, `subagent_type=`, per-call `model=`, `run_in_background`, and
+// `TaskOutput`, none of which exist on Zoo.
+
+describe('#4746 mode roleDefinitions are dispatch-projected onto new_task', () => {
+  test('an agent body with a live Agent(...) call ships as new_task(mode=...), stripped of Claude-only vocabulary', () => {
+    const root = createTempDir('gsd-zoo-modes-proj-');
+    try {
+      const agentsSrc = path.join(root, 'agents');
+      fs.mkdirSync(agentsSrc, { recursive: true });
+      fs.writeFileSync(
+        path.join(agentsSrc, 'gsd-debug-session-manager.md'),
+        [
+          '---',
+          'name: gsd-debug-session-manager',
+          'description: Manages checkpoints via AskUserQuestion.',
+          '---',
+          'Spawn step:',
+          '',
+          'Agent(',
+          '  prompt=filled_prompt,',
+          '  subagent_type="gsd-debugger",',
+          '  model="{debugger_model}",',
+          '  description="Debug {slug}",',
+          '  run_in_background=false',
+          ')',
+          '',
+          'Never pass an agent id to `TaskOutput` — an agent id is not a task id.',
+          '**Foreground, blocking spawn.** `run_in_background: false` is REQUIRED.',
+        ].join('\n'),
+      );
+      const project = path.join(root, 'project');
+      fs.mkdirSync(project);
+      installZooModes(project, agentsSrc, false, { env: {}, home: root });
+      const yaml = readFileNormalized(path.join(project, '.roomodes'));
+      assert.ok(yaml.includes('new_task('), 'dispatch call projected onto new_task');
+      assert.ok(yaml.includes('mode="gsd-debugger"'), 'subagent_type renamed to the zoo mode param');
+      const mask = maskStringLiterals(yaml);
+      assert.ok(!/\bsubagent_type\s*[=:]/.test(mask), 'no subagent_type dispatch syntax survives');
+      assert.ok(!/\bAgent\(/.test(mask), 'no literal Agent( call survives');
+      assert.ok(!yaml.includes('run_in_background'), 'background-flag vocabulary is dropped (arg + prose)');
+      assert.ok(!yaml.includes('TaskOutput'), 'TaskOutput vocabulary is dropped');
+      assert.ok(!yaml.includes('AskUserQuestion'), 'AskUserQuestion swapped in body AND whenToUse');
+      assert.ok(yaml.includes('ask_followup_question'), 'zoo tool name present');
+    } finally {
+      cleanup(root);
+    }
+  });
+
+  test('the real shipped agents corpus installs with zero Claude dispatch vocabulary in any gsd-* mode', () => {
+    const root = createTempDir('gsd-zoo-modes-corpus-');
+    try {
+      const project = path.join(root, 'project');
+      fs.mkdirSync(project);
+      const repoAgents = path.join(__dirname, '..', 'agents');
+      installZooModes(project, repoAgents, false, { env: {}, home: root });
+      const yaml = readFileNormalized(path.join(project, '.roomodes'));
+      const mask = maskStringLiterals(yaml);
+      assert.ok(!/\bAgent\(/.test(mask), 'no literal Agent( call in any mode');
+      assert.ok(!/\bsubagent_type\s*[=:]/.test(mask), 'no subagent_type dispatch syntax in any mode');
+      assert.ok(!yaml.includes('run_in_background'), 'no background-flag vocabulary in any mode');
+      assert.ok(!yaml.includes('TaskOutput'), 'no TaskOutput vocabulary in any mode');
+      assert.ok(!yaml.includes('AskUserQuestion'), 'no AskUserQuestion in any mode');
+      const dbg = yaml.split(/(?=^ {2}- slug:)/m).find((b) => /^ {2}- slug: gsd-debug-session-manager/m.test(b));
+      assert.ok(dbg, 'gsd-debug-session-manager mode present');
+      assert.ok(dbg.includes('mode="gsd-debugger"'), 'its dispatch projects to new_task(mode="gsd-debugger")');
+    } finally {
+      cleanup(root);
+    }
+  });
+});
+
 describe('#4746 installZooModes global — custom_modes.yaml + source: global', () => {
   let root;
   let agentsSrc;

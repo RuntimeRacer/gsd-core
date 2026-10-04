@@ -351,3 +351,114 @@ describe('#4746 named-rename path does not disturb the structural path', () => {
     assert.ok(out.includes('prompt=x'), 'the structural path leaves the prompt= arg as-is');
   });
 });
+
+// ─── 6. Zoo lexicon projection (Skill() calls, tool vocabulary, headers) ──────
+//
+// Vocabulary the #2284 machinery does not own because it is not Agent(...)
+// call structure. Measured pre-fix against the shipped corpus: 59 live
+// Skill( calls in 14 files, "Task tool" gates in 7, AskUserQuestion in 60,
+// and the #3324 verbatim-inline mandate — all shipped broken on Zoo (no
+// Skill tool, no TaskOutput, no inlining budget).
+
+describe('#4746 zoo lexicon pass — Skill() dispatches project to inline workflow follow-through', () => {
+  test('Skill(skill="gsd-x", args="y") becomes an inline workflow follow instruction', () => {
+    const out = convertClaudeToZooWorkflowMarkdown('Skill(skill="gsd-plan-phase", args="{N} --auto")', { runtime: 'zoo' });
+    assert.strictEqual(out, 'read and follow gsd-core/workflows/plan-phase.md inline (args: {N} --auto)');
+  });
+
+  test('the dynamic mixed form gsd-${ref.skill} survives with the template intact', () => {
+    const out = convertClaudeToZooWorkflowMarkdown('Skill(skill="gsd-${ref.skill}", args="${PHASE} --auto ${GSD_WS}")', { runtime: 'zoo' });
+    assert.strictEqual(out, 'read and follow gsd-core/workflows/${ref.skill}.md inline (args: ${PHASE} --auto ${GSD_WS})');
+  });
+
+  test('args-less and bare-string and single-quoted forms all project', () => {
+    assert.strictEqual(
+      convertClaudeToZooWorkflowMarkdown('Skill(skill="gsd-audit-milestone")', { runtime: 'zoo' }),
+      'read and follow gsd-core/workflows/audit-milestone.md inline',
+    );
+    assert.strictEqual(
+      convertClaudeToZooWorkflowMarkdown('Skill("gsd-plan-phase --reviews")', { runtime: 'zoo' }),
+      'read and follow gsd-core/workflows/plan-phase.md inline (args: --reviews)',
+    );
+    assert.strictEqual(
+      convertClaudeToZooWorkflowMarkdown("Skill(skill='gsd-review', args='--phase {PHASE}')", { runtime: 'zoo' }),
+      'read and follow gsd-core/workflows/review.md inline (args: --phase {PHASE})',
+    );
+  });
+
+  test('the backslash-escaped form inside an Agent() prompt string projects too', () => {
+    const out = convertClaudeToZooWorkflowMarkdown(
+      'Agent(prompt="Run it: Skill(skill=\\"gsd-plan-phase\\", args=\\"${PHASE_NUM}\\")", subagent_type="gsd-executor")',
+      { runtime: 'zoo' },
+    );
+    assert.ok(out.includes('read and follow gsd-core/workflows/plan-phase.md inline (args: ${PHASE_NUM})'),
+      'inner escaped Skill call is rewritten before the Agent span is projected');
+    assert.ok(out.includes('new_task('), 'the outer Agent call is projected as usual');
+  });
+
+  test('a non-gsd skill name becomes an explicit handle-or-surface note, not a dangling call', () => {
+    const out = convertClaudeToZooWorkflowMarkdown('Skill(skill="update-config")', { runtime: 'zoo' });
+    assert.strictEqual(out, 'no Skill tool on this runtime — handle "update-config" inline or surface it to the user');
+  });
+
+  test('prose Skill() mentions without arguments survive (concept mentions, not calls)', () => {
+    const out = convertClaudeToZooWorkflowMarkdown('Discuss phases run inline via Skill() — flat `Skill()` invocations', { runtime: 'zoo' });
+    assert.ok(out.includes('via Skill()'), 'bare prose mention is untouched');
+    assert.ok(out.includes('flat `Skill()` invocations'), 'backticked bare mention is untouched');
+  });
+
+  test('the fail-closed guard throws on an unanticipated Skill dispatch form', () => {
+    // Shape (a1) requires a quoted name — an unquoted variable argument is a
+    // form the lexicon does not anticipate and must abort, not ship.
+    assert.throws(
+      () => convertClaudeToZooWorkflowMarkdown('Skill(skill=ref.skill)', { runtime: 'zoo' }),
+      /literal Skill\(\.\.\.\) dispatch call/i,
+    );
+  });
+});
+
+describe('#4746 zoo lexicon pass — Claude tool vocabulary and mode headers', () => {
+  test('"Task tool" gates evaluate against new_task', () => {
+    const out = convertClaudeToZooWorkflowMarkdown('<step name="s" condition="Task tool is NOT available">Go sequential.</step>', { runtime: 'zoo' });
+    assert.ok(out.includes('new_task tool is NOT available'), 'Task tool renamed to the real primitive');
+  });
+
+  test('AskUserQuestion swaps to ask_followup_question', () => {
+    const out = convertClaudeToZooWorkflowMarkdown('Ask the user via AskUserQuestion with 3 options.', { runtime: 'zoo' });
+    assert.strictEqual(out, 'Ask the user via ask_followup_question with 3 options.');
+  });
+
+  test('<available_agent_types> headers describe modes, not .claude/agents/ files', () => {
+    const hdr = '<available_agent_types>\nValid GSD subagent types (use exact names — do not fall back to \'general-purpose\'):\n- gsd-verifier — verifies\n</available_agent_types>';
+    const out = convertClaudeToZooWorkflowMarkdown(hdr, { runtime: 'zoo' });
+    assert.ok(out.includes('Valid GSD modes — dispatch each via new_task(mode="<slug>")'), 'header rewritten to mode vocabulary');
+    assert.ok(!out.includes('subagent types'), 'subagent-type phrasing is gone');
+  });
+
+  test('agent FILE path references point at the mode role definition', () => {
+    const out = convertClaudeToZooWorkflowMarkdown('Read ~/.claude/agents/gsd-security-auditor.md for instructions.', { runtime: 'zoo' });
+    assert.ok(out.includes('the gsd-security-auditor custom mode role definition'), 'path rewritten to the modes surface');
+    assert.ok(out.includes('new_task(mode="gsd-security-auditor")'), 'dispatch hint included');
+    assert.ok(!out.includes('.claude/agents/'), 'no claude agents path survives');
+  });
+
+  test('Claude-only primitive lines (TaskOutput, run_in_background prose) are dropped', () => {
+    const fixture = [
+      '> **ORCHESTRATOR RULE — BACKGROUND DISPATCH**: After calling Agent() above with `run_in_background=true`, do NOT plan. Wait.',
+      'Never pass an agent id to `TaskOutput` — an agent id is not a task id.',
+      'This line survives untouched.',
+    ].join('\n');
+    const out = convertClaudeToZooWorkflowMarkdown(fixture, { runtime: 'zoo' });
+    assert.ok(!out.includes('run_in_background'), 'background-flag line dropped (new_task has no background variant)');
+    assert.ok(!out.includes('TaskOutput'), 'TaskOutput line dropped (no polling on Zoo)');
+    assert.ok(out.includes('This line survives untouched.'), 'unrelated lines preserved');
+  });
+
+  test('the #3324 verbatim-inline mandate becomes a subtask self-reads instruction', () => {
+    const mandate = '<execution_context>\nORCHESTRATOR build-time embed (NOT a sub-agent runtime step): before this dispatch, read each file listed below and replace this note with those files\' contents, inlined verbatim in this block in the listed order. Never leave `@`-include lines in the dispatched prompt — `@path` never expands inside an Agent() `prompt="..."` string (#3324), so an include arrives as literal text the executor never sees.\n- `~/.roo/gsd-core/workflows/execute-plan.md`\n</execution_context>';
+    const out = convertClaudeToZooWorkflowMarkdown(mandate, { runtime: 'zoo' });
+    assert.ok(out.includes('ZOO DISPATCH CONTEXT — subtask self-reads'), 'mandate replaced by the self-reads contract');
+    assert.ok(out.includes('~/.roo/gsd-core/workflows/execute-plan.md'), 'the file list itself is preserved verbatim');
+    assert.ok(!out.includes('inlined verbatim'), 'the inlining instruction is gone');
+  });
+});

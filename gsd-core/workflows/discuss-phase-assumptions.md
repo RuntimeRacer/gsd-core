@@ -9,6 +9,7 @@ believe based on evidence, and ask the user only to correct what's wrong.
 <available_agent_types>
 Valid GSD subagent types (use exact names — do not fall back to 'general-purpose'):
 - gsd-assumptions-analyzer — Analyzes codebase to surface implementation assumptions
+- gsd-phase-researcher — Researches flagged topics and returns sourced findings
 </available_agent_types>
 
 <downstream_awareness>
@@ -323,10 +324,10 @@ Parse the subagent's response. Extract:
 <step name="external_research">
 **Skip if:** `needs_research` from deep_codebase_analysis is empty.
 
-If research topics were flagged, spawn a general-purpose research agent (runs in a subagent — no output until it returns, ~1–5 min; expected, not a freeze):
+If research topics were flagged, spawn the phase researcher (runs in a subagent — no output until it returns, ~1–5 min; expected, not a freeze):
 
 ```
-Agent(subagent_type="general-purpose", prompt="""
+Agent(subagent_type="gsd-phase-researcher", prompt="""
 Research the following topics for Phase {PHASE}: {phase_name}.
 
 Topics needing research:
